@@ -66,7 +66,7 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            # Ganti 'admin123' dengan PIN pilihan Anda jika diperlukan
+            # Ganti 'admin123' dengan PIN pilihan Anda
             if instructor_pin == "Indomiesoto1":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
@@ -310,6 +310,80 @@ elif menu == "Dashboard Instruktur & Records":
                 mime="text/csv",
                 use_container_width=True
             )
+
+        # ------------------- FITUR UNDUH ULANG SERTIFIKAT -------------------
+        st.markdown("---")
+        st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
+        
+        # Saring hanya peserta yang LULUS dan memiliki nomor sertifikat
+        passed_records = records_df[
+            (records_df['status'] == 'LULUS') & 
+            (records_df['cert_no_sj'] != '-') & 
+            (records_df['cert_no_sj'].notna())
+        ].copy()
+
+        if passed_records.empty:
+            st.info("Belum ada data peserta yang dinyatakan lulus untuk diunduh sertifikatnya.")
+        else:
+            # Format opsi dropdown: NIK - Nama Lengkap - Distrik - Tanggal Training
+            options_dict = {}
+            for idx, r in passed_records.iterrows():
+                label = f"{r['nik']} - {r['full_name']} ({r['district']}) | Tgl: {r['training_date']}"
+                options_dict[label] = r
+
+            selected_candidate_label = st.selectbox(
+                "Pilih Peserta untuk Dicetak Ulang Sertifikatnya:",
+                options=list(options_dict.keys())
+            )
+
+            selected_candidate = options_dict[selected_candidate_label]
+
+            st.write(
+                f"**Peserta:** {selected_candidate['full_name']} | **Perusahaan:** {selected_candidate['company']} | "
+                f"**No Sertifikat SJ:** `{selected_candidate['cert_no_sj']}` | **No Sertifikat IN:** `{selected_candidate['cert_no_in']}`"
+            )
+
+            re_col1, re_col2 = st.columns(2)
+
+            with re_col1:
+                try:
+                    re_pdf_sj = generate_certificate(
+                        airline_type="SJ",
+                        cert_no=str(selected_candidate['cert_no_sj']),
+                        full_name=str(selected_candidate['full_name']),
+                        company=str(selected_candidate['company']),
+                        district=str(selected_candidate['district']),
+                        training_date=str(selected_candidate['training_date'])
+                    )
+                    st.download_button(
+                        label=f"📄 Unduh Ulang Sertifikat SJ ({selected_candidate['full_name']})",
+                        data=re_pdf_sj,
+                        file_name=f"Sertifikat_SJ_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Gagal mencetak ulang sertifikat SJ: {e}")
+
+            with re_col2:
+                try:
+                    re_pdf_in = generate_certificate(
+                        airline_type="IN",
+                        cert_no=str(selected_candidate['cert_no_in']),
+                        full_name=str(selected_candidate['full_name']),
+                        company=str(selected_candidate['company']),
+                        district=str(selected_candidate['district']),
+                        training_date=str(selected_candidate['training_date'])
+                    )
+                    st.download_button(
+                        label=f"📄 Unduh Ulang Sertifikat IN ({selected_candidate['full_name']})",
+                        data=re_pdf_in,
+                        file_name=f"Sertifikat_IN_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Gagal mencetak ulang sertifikat IN: {e}")
 
 
 # ==================== MENU 3: MASTER DISTRIK & RECURRENT ====================
