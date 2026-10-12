@@ -42,7 +42,7 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            if instructor_pin == "admin123":  # Ganti dengan password yang Anda inginkan
+            if instructor_pin == "Indomiesoto1":  # Ganti dengan password yang Anda inginkan
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
