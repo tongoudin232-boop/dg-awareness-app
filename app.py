@@ -23,6 +23,10 @@ init_db()
 if "is_instructor" not in st.session_state:
     st.session_state["is_instructor"] = False
 
+# Tampilkan logo di bagian atas sidebar
+if os.path.exists("logo_sriwijaya.png"):
+    st.sidebar.image("logo_sriwijaya.png", use_container_width=True)
+
 st.sidebar.title("Navigasi")
 
 if st.session_state["is_instructor"]:
@@ -63,14 +67,35 @@ JOB_ROLES = [
 
 # ==================== MENU 1: UJIAN DG AWARENESS ====================
 if menu == "Ujian DG Awareness":
-    st.title("✈️ Examination DG Awareness")
-    st.caption("Sriwijaya Air & NAM Air Cargo Training System")
+    import os
 
-    with st.expander("Syarat & Ketentuan Kelulusan", expanded=True):
-        st.write("- Durasi Training: 8 Jam (1 Hari)")
-        st.write("- Jumlah Soal: 25 Pilihan Ganda (Bobot 4 Poin/Soal)")
-        st.write("- Passing Grade Kelulusan: **≥ 80 Poin** (Minimal 20 Jawaban Benar)")
-        st.write("- Peserta yang lulus langsung memperoleh **2 Sertifikat Resmi (Sriwijaya Air & NAM Air)**.")
+# ==================== BANNER LOGO & HEADER ====================
+col_logo1, col_title, col_logo2 = st.columns([1.5, 5, 1.5])
+
+with col_logo1:
+    if os.path.exists("logo_sriwijaya.png"):
+        st.image("logo_sriwijaya.png", use_container_width=True)
+
+with col_title:
+    st.markdown(
+        """
+        <div style="text-align: center; padding: 10px 0;">
+            <h1 style="color: #0E3B68; margin-bottom: 0px; font-size: 2.2rem; font-weight: 800;">
+                ✈️ Examination DG Awareness
+            </h1>
+            <h4 style="color: #6C757D; margin-top: 5px; font-weight: 400; letter-spacing: 1px;">
+                Sriwijaya Air & NAM Air Cargo Training System
+            </h4>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col_logo2:
+    if os.path.exists("logo_namair.png"):
+        st.image("logo_namair.png", use_container_width=True)
+
+st.markdown("<hr style='margin-top: -5px; margin-bottom: 25px; border: 1px solid #E0E0E0;'>", unsafe_allow_html=True)
 
     st.subheader("1. Data Diri Peserta")
     col1, col2 = st.columns(2)
