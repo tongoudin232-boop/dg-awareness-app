@@ -19,12 +19,35 @@ from cert_generator import generate_certificate
 st.set_page_config(page_title="DG Awareness Training - SJ & IN", layout="wide", page_icon="✈️")
 init_db()
 
-menu = st.sidebar.radio("Navigasi Menu", [
-    "Ujian DG Awareness",
-    "Dashboard Instruktur & Records",
-    "Master Distrik & Jadwal Recurrent"
-])
+# ==================== SISTEM AKSES INSTRUKTUR ====================
+if "is_instructor" not in st.session_state:
+    st.session_state["is_instructor"] = False
 
+st.sidebar.title("Navigasi")
+
+if st.session_state["is_instructor"]:
+    menu_options = [
+        "Ujian DG Awareness",
+        "Dashboard Instruktur & Records",
+        "Master Distrik & Jadwal Recurrent"
+    ]
+    menu = st.sidebar.radio("Navigasi Menu", menu_options)
+    
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔒 Logout Instruktur"):
+        st.session_state["is_instructor"] = False
+        st.rerun()
+else:
+    menu = "Ujian DG Awareness"
+    with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
+        instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
+        if st.button("Masuk"):
+            if instructor_pin == "admin123":  # Ganti dengan password yang Anda inginkan
+                st.session_state["is_instructor"] = True
+                st.success("Login berhasil!")
+                st.rerun()
+            else:
+                st.error("PIN salah!")
 JOB_ROLES = [
     "Staf Kargo / Cargo Officer",
     "Porter / Cargo Loader",
