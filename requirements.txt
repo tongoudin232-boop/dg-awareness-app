@@ -1,0 +1,8 @@
+streamlit
+pandas
+openpyxl
+reportlab
+pypdf
+qrcode
+pillow
+python-dateutil
