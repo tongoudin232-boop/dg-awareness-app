@@ -66,8 +66,8 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            # Ganti 'admin123' dengan PIN pilihan Anda
-            if instructor_pin == "Indomiesoto1":
+            # Ganti 'admin123' dengan PIN pilihan Anda jika diperlukan
+            if instructor_pin == "admin123":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
@@ -178,12 +178,12 @@ if menu == "Ujian DG Awareness":
 
                 try:
                     pdf_sj = generate_certificate(
-                        airline_type="SJ",
+                        airline="SJ",
+                        name=full_name,
                         cert_no=cert_no_sj,
-                        full_name=full_name,
                         company=company,
                         district=dist_code,
-                        training_date=str(training_date)
+                        training_date_str=str(training_date)
                     )
                     with col_d1:
                         st.download_button(
@@ -198,12 +198,12 @@ if menu == "Ujian DG Awareness":
 
                 try:
                     pdf_in = generate_certificate(
-                        airline_type="IN",
+                        airline="IN",
+                        name=full_name,
                         cert_no=cert_no_in,
-                        full_name=full_name,
                         company=company,
                         district=dist_code,
-                        training_date=str(training_date)
+                        training_date_str=str(training_date)
                     )
                     with col_d2:
                         st.download_button(
@@ -348,12 +348,12 @@ elif menu == "Dashboard Instruktur & Records":
             with re_col1:
                 try:
                     re_pdf_sj = generate_certificate(
-                        airline_type="SJ",
+                        airline="SJ",
+                        name=str(selected_candidate['full_name']),
                         cert_no=str(selected_candidate['cert_no_sj']),
-                        full_name=str(selected_candidate['full_name']),
                         company=str(selected_candidate['company']),
                         district=str(selected_candidate['district']),
-                        training_date=str(selected_candidate['training_date'])
+                        training_date_str=str(selected_candidate['training_date'])
                     )
                     st.download_button(
                         label=f"📄 Unduh Ulang Sertifikat SJ ({selected_candidate['full_name']})",
@@ -368,12 +368,12 @@ elif menu == "Dashboard Instruktur & Records":
             with re_col2:
                 try:
                     re_pdf_in = generate_certificate(
-                        airline_type="IN",
+                        airline="IN",
+                        name=str(selected_candidate['full_name']),
                         cert_no=str(selected_candidate['cert_no_in']),
-                        full_name=str(selected_candidate['full_name']),
                         company=str(selected_candidate['company']),
                         district=str(selected_candidate['district']),
-                        training_date=str(selected_candidate['training_date'])
+                        training_date_str=str(selected_candidate['training_date'])
                     )
                     st.download_button(
                         label=f"📄 Unduh Ulang Sertifikat IN ({selected_candidate['full_name']})",
