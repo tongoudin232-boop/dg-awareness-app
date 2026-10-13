@@ -6,28 +6,20 @@ from reportlab.lib import colors
 from pypdf import PdfReader, PdfWriter
 
 def create_qr_file(airline, cert_no, name, date_str):
-    company = "PT SRIWIJAYA AIR" if airline == "SJ" else "PT NAM AIR"
-    qr_data = (
-        f"VERIFIED & DIGITALLY SIGNED\n"
-        f"Signatory: RENJI HAGEN\n"
-        f"Title: KADIV CARGO\n"
-        f"Airline: {company}\n"
-        f"Certificate No: {cert_no}\n"
-        f"Recipient: {name}\n"
-        f"Date: {date_str}\n"
-        f"Status: VALID / OFFICIAL"
-    )
+    # Link URL verifikasi online resmi yang akan dibuka saat scan QR
+    verify_url = f"https://ujian-dg-awareness.streamlit.app/?cert={cert_no}"
+    
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
         box_size=10,
         border=1,
     )
-    qr.add_data(qr_data)
+    qr.add_data(verify_url)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     
-    file_path = "temp_kadiv_qr.png"
+    file_path = f"temp_qr_{cert_no}.png"
     img.save(file_path)
     return file_path
 
@@ -65,7 +57,7 @@ def create_overlay(airline, cert_no, name, training_date_str, page_width, page_h
     can.drawCentredString(center_x, y_date, f"Tangerang, {training_date_str}")
 
     # -----------------------------------------------------------------
-    # 4. QR CODE KADIV CARGO (Tetap di atas garis nama Renji Hagen)
+    # 4. QR CODE KADIV CARGO (Scan langsung menuju URL verifikasi)
     # -----------------------------------------------------------------
     qr_path = create_qr_file(airline, cert_no, name, training_date_str)
     qr_size = 80
@@ -74,6 +66,11 @@ def create_overlay(airline, cert_no, name, training_date_str, page_width, page_h
 
     if os.path.exists(qr_path):
         can.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size, mask=None)
+        # Hapus file temporary QR setelah digambar ke canvas
+        try:
+            os.remove(qr_path)
+        except Exception:
+            pass
 
     can.save()
     packet.seek(0)

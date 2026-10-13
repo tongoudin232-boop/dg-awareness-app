@@ -27,7 +27,88 @@ st.set_page_config(
 # Inisialisasi Database
 init_db()
 
-# Daftar Jabatan
+# ==================== 1. VERIFIKASI SERTIFIKAT VIA QR CODE ====================
+query_params = st.query_params
+
+if "cert" in query_params:
+    cert_query = str(query_params["cert"]).strip()
+    
+    # Ambil data dari database
+    records_df = get_training_records()
+    matched = records_df[
+        (records_df['cert_no_sj'].astype(str) == cert_query) | 
+        (records_df['cert_no_in'].astype(str) == cert_query)
+    ]
+    
+    # Header Banner Verifikasi
+    col_vlogo1, col_vtitle, col_vlogo2 = st.columns([1.5, 5, 1.5])
+    with col_vlogo1:
+        if os.path.exists("logo_sriwijaya.png"):
+            st.image("logo_sriwijaya.png", use_container_width=True)
+    with col_vtitle:
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 10px 0;">
+                <h1 style="color: #0E3B68; margin-bottom: 0px;">✈️ Portal Verifikasi Sertifikat</h1>
+                <h4 style="color: #6C757D; margin-top: 5px;">Sriwijaya Air & NAM Air Dangerous Goods Training</h4>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with col_vlogo2:
+        if os.path.exists("logo_namair.png"):
+            st.image("logo_namair.png", use_container_width=True)
+
+    st.markdown("<hr style='border: 1px solid #E0E0E0;'>", unsafe_allow_html=True)
+    
+    if not matched.empty:
+        rec = matched.iloc[0]
+        st.success("✅ **SERTIFIKAT RESMI TERVERIFIKASI & TERCATAT DI DATABASE (VALID)**")
+        
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            st.markdown(f"**Nama Peserta:** {rec['full_name']}")
+            st.markdown(f"**NIK / Employee ID:** {rec['nik']}")
+            st.markdown(f"**Perusahaan / Mitra:** {rec['company']}")
+            st.markdown(f"**Jabatan / Posisi:** {rec['job_role']}")
+        with col_v2:
+            st.markdown(f"**Distrik Pelaksanaan:** {rec['district']}")
+            st.markdown(f"**Tanggal Training:** {rec['training_date']}")
+            st.markdown(f"**No. Sertifikat Sriwijaya Air:** `{rec['cert_no_sj']}`")
+            st.markdown(f"**No. Sertifikat NAM Air:** `{rec['cert_no_in']}`")
+        
+        st.markdown("---")
+        st.subheader("Salinan Resmi Dokumen")
+        
+        airline_target = "SJ" if str(rec['cert_no_sj']) == cert_query else "IN"
+        airline_name = "Sriwijaya Air" if airline_target == "SJ" else "NAM Air"
+        try:
+            cert_pdf = generate_certificate(
+                airline=airline_target,
+                name=str(rec['full_name']),
+                cert_no=str(cert_query),
+                company=str(rec['company']),
+                district=str(rec['district']),
+                training_date_str=str(rec['training_date'])
+            )
+            st.download_button(
+                label=f"📥 Unduh Salinan Sertifikat {airline_name} ({airline_target})",
+                data=cert_pdf,
+                file_name=f"Salinan_Sertifikat_{rec['full_name']}_{airline_target}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"Gagal memuat salinan sertifikat: {e}")
+            
+    else:
+        st.error("❌ **DATA SERTIFIKAT TIDAK DITEMUKAN!**")
+        st.warning(f"Nomor sertifikat '{cert_query}' tidak terdaftar pada sistem database pelatihan resmi Sriwijaya Air & NAM Air Cargo.")
+        
+    st.stop()
+
+
+# ==================== DAFTAR JABATAN ====================
 JOB_ROLES = [
     "Staf Kargo / Cargo Officer",
     "Porter / Cargo Loader",
@@ -43,7 +124,6 @@ JOB_ROLES = [
 if "is_instructor" not in st.session_state:
     st.session_state["is_instructor"] = False
 
-# Tampilkan logo di sidebar jika file tersedia
 if os.path.exists("logo_sriwijaya.png"):
     st.sidebar.image("logo_sriwijaya.png", use_container_width=True)
 
@@ -66,7 +146,6 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            # Ganti 'admin123' dengan PIN pilihan Anda jika diperlukan
             if instructor_pin == "Indomiesoto1":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
@@ -77,7 +156,6 @@ else:
 
 # ==================== MENU 1: UJIAN DG AWARENESS ====================
 if menu == "Ujian DG Awareness":
-    # Header Banner & Logo
     col_logo1, col_title, col_logo2 = st.columns([1.5, 5, 1.5])
     with col_logo1:
         if os.path.exists("logo_sriwijaya.png"):
@@ -117,7 +195,7 @@ if menu == "Ujian DG Awareness":
         nik = st.text_input("NIK / Employee ID*")
         job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
         
-        # Kolom dinamis jika peserta memilih "Lainnya"
+        # Munculkan form input tambahan jika memilih 'Lainnya'
         if job_role_selected == "Lainnya":
             custom_role = st.text_input("Sebutkan Jabatan / Unit Kerja Anda*")
             job_role = custom_role.strip()
@@ -163,11 +241,9 @@ if menu == "Ujian DG Awareness":
                 st.balloons()
                 st.success(f"🎉 SELAMAT! Anda dinyatakan **LULUS** dengan Nilai: **{score} / 100** (Benar: {correct_count}/25).")
 
-                # Generate Nomor Sertifikat Otomatis
                 cert_no_sj = get_next_cert_number("SJ")
                 cert_no_in = get_next_cert_number("IN")
 
-                # Simpan ke Database
                 save_training_record(
                     full_name=full_name,
                     nik=nik,
@@ -323,7 +399,6 @@ elif menu == "Dashboard Instruktur & Records":
         st.markdown("---")
         st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
         
-        # Saring hanya peserta yang LULUS dan memiliki nomor sertifikat
         passed_records = records_df[
             (records_df['status'] == 'LULUS') & 
             (records_df['cert_no_sj'] != '-') & 
