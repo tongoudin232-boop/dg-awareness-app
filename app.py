@@ -16,6 +16,7 @@ from database import (
 )
 from exam_data import QUESTIONS
 from cert_generator import generate_certificate
+from attendance_generator import generate_attendance_pdf, generate_attendance_excel
 
 # ==================== KONFIGURASI HALAMAN ====================
 st.set_page_config(
@@ -142,7 +143,7 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            if instructor_pin == "Indomiesoto1":
+            if instructor_pin == "admin123":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
@@ -189,6 +190,7 @@ if menu == "Ujian DG Awareness":
     with col1:
         full_name = st.text_input("Nama Lengkap*")
         nik = st.text_input("NIK / Employee ID*")
+        phone = st.text_input("No. Handphone / WhatsApp*")
         job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
         
         if job_role_selected == "Lainnya":
@@ -221,23 +223,20 @@ if menu == "Ujian DG Awareness":
         submit_btn = st.form_submit_button("Submit Jawaban & Evaluasi Nilai", type="primary")
 
     if submit_btn:
-        if not full_name or not nik or not company or not selected_dist or not job_role:
-            st.error("Mohon lengkapi seluruh kolom Data Diri Peserta sebelum submit!")
+        if not full_name or not nik or not phone or not company or not selected_dist or not job_role:
+            st.error("Mohon lengkapi seluruh kolom Data Diri Peserta (termasuk No. Handphone) sebelum submit!")
         elif any(user_answers[i] is None for i in range(len(QUESTIONS))):
             st.warning("Pastikan seluruh 25 soal telah dijawab!")
         else:
             correct_count = 0
             for i, q in enumerate(QUESTIONS):
                 selected_val = user_answers[i]
-                
-                # Mendapatkan jawaban yang benar baik berupa indeks angka maupun string
                 raw_ans = q['answer']
                 if isinstance(raw_ans, int):
                     correct_val = q['options'][raw_ans]
                 else:
                     correct_val = str(raw_ans)
                 
-                # Bandingkan jawaban peserta dengan kunci jawaban
                 if str(selected_val).strip().lower() == str(correct_val).strip().lower():
                     correct_count += 1
 
@@ -259,6 +258,7 @@ if menu == "Ujian DG Awareness":
                     'training_date': str(training_date),
                     'full_name': full_name,
                     'nik': nik,
+                    'phone': phone,
                     'job_role': job_role,
                     'company': company,
                     'district': dist_code,
@@ -316,6 +316,7 @@ if menu == "Ujian DG Awareness":
                     'training_date': str(training_date),
                     'full_name': full_name,
                     'nik': nik,
+                    'phone': phone,
                     'job_role': job_role,
                     'company': company,
                     'district': dist_code,
@@ -382,7 +383,7 @@ elif menu == "Dashboard Instruktur & Records":
                 st.toast(f"{len(to_del_records)} data berhasil dihapus!", icon="✅")
                 st.rerun()
 
-        # Ekspor Excel & CSV
+        # Ekspor Excel & CSV Seluruh Record
         output = io.BytesIO()
         export_df = filtered_df.drop(columns=['Hapus'], errors='ignore')
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -406,6 +407,141 @@ elif menu == "Dashboard Instruktur & Records":
                 mime="text/csv",
                 use_container_width=True
             )
+
+        # =========================================================================
+        # 📝 FITUR GENERATOR DAFTAR KEHADIRAN (ABSENSI RESMI TRAINING)
+        # =========================================================================
+        st.markdown("---")
+        st.subheader("📝 Penerbitan Daftar Kehadiran (Absensi) Training")
+        st.caption("Gunakan bagian ini untuk menerbitkan absensi resmi per distrik dan per tanggal kegiatan.")
+
+        # Step 1: Filter Distrik & Tanggal Kegiatan
+        col_ab1, col_ab2 = st.columns(2)
+        with col_ab1:
+            all_districts = sorted(records_df['district'].dropna().unique().tolist())
+            selected_absensi_dist = st.selectbox("1. Pilih Distrik Penugasan:", options=all_districts)
+        with col_ab2:
+            dist_records = records_df[records_df['district'] == selected_absensi_dist]
+            avail_dates = sorted(dist_records['training_date'].dropna().unique().tolist(), reverse=True)
+            if avail_dates:
+                selected_absensi_date = st.selectbox("2. Pilih Tanggal Training:", options=avail_dates)
+            else:
+                selected_absensi_date = None
+                st.info("Tidak ada data kegiatan di distrik ini.")
+
+        if selected_absensi_date:
+            candidates_att = dist_records[dist_records['training_date'] == selected_absensi_date].copy()
+            total_peserta = len(candidates_att)
+            st.info(f"Ditemukan **{total_peserta} orang peserta** untuk Distrik **{selected_absensi_dist}** pada tanggal **{selected_absensi_date}**.")
+
+            # Step 2: Konfigurasi Pelaksanaan & Upload Bukti Foto
+            c_meta1, c_meta2, c_meta3 = st.columns(3)
+            with c_meta1:
+                mode_training = st.radio("Metode Pelaksanaan:", ["Online", "Offline"], horizontal=True)
+            with c_meta2:
+                jam_training = st.text_input("Pukul / Waktu Training:", value="13.00 - 17.00")
+            with c_meta3:
+                nama_instruktur = st.text_input("Nama Instruktur:", value="HADI NURHUDA")
+
+            c_meta4, c_meta5 = st.columns([2, 2])
+            with c_meta4:
+                default_tempat = f"Station {selected_absensi_dist} ({mode_training.lower()})"
+                tempat_training = st.text_input("Tempat Training:", value=default_tempat)
+            with c_meta5:
+                foto_uploaded = st.file_uploader("Upload Foto Bukti Pelatihan (JPG / PNG):", type=["jpg", "jpeg", "png"])
+
+            # Logika Sesi Peserta
+            if mode_training == "Offline":
+                batch_size = 25
+                sessions = [candidates_att.iloc[i:i + batch_size] for i in range(0, total_peserta, batch_size)]
+                num_sessions = len(sessions)
+                st.write(f"📌 *Mode Offline: Dipecah menjadi **{num_sessions} Sesi** (Maksimal 25 peserta/sesi).*")
+            else:
+                sessions = [candidates_att]
+                num_sessions = 1
+                st.write("📌 *Mode Online: Seluruh peserta digabung ke dalam 1 lembar absensi.*")
+
+            # Konversi Tanggal ke Format Bahasa Indonesia (contoh: Selasa, 13 Oktober 2026)
+            try:
+                dt_obj = datetime.strptime(str(selected_absensi_date)[:10], "%Y-%m-%d")
+                hari_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][dt_obj.weekday()]
+                bulan_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][dt_obj.month - 1]
+                tgl_display = f"{hari_id}, {dt_obj.day} {bulan_id} {dt_obj.year}"
+            except Exception:
+                tgl_display = str(selected_absensi_date)
+
+            foto_bytes = foto_uploaded.getvalue() if foto_uploaded is not None else None
+
+            # Step 3: Tombol Ekspor PDF & XLSX untuk Masing-Masing Sesi
+            for s_idx, session_df in enumerate(sessions):
+                sesi_label = f"Sesi {s_idx + 1}" if num_sessions > 1 else "Dokumen Absensi"
+                st.markdown(f"#### 📄 Unduh {sesi_label} ({len(session_df)} Peserta)")
+
+                c_btn1, c_btn2, c_btn3 = st.columns(3)
+
+                # 1. Absensi Sriwijaya Air (SJ)
+                with c_btn1:
+                    try:
+                        pdf_sj_att = generate_attendance_pdf(
+                            airline="SJ",
+                            date_display=tgl_display,
+                            time_str=jam_training,
+                            venue_str=tempat_training,
+                            instructor_name=nama_instruktur,
+                            df_session=session_df,
+                            photo_bytes=foto_bytes
+                        )
+                        st.download_button(
+                            label=f"📥 PDF Sriwijaya Air ({sesi_label})",
+                            data=pdf_sj_att,
+                            file_name=f"Absensi_SJ_{selected_absensi_dist}_{selected_absensi_date}_{sesi_label.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal generate PDF SJ: {e}")
+
+                # 2. Absensi NAM Air (IN)
+                with c_btn2:
+                    try:
+                        pdf_in_att = generate_attendance_pdf(
+                            airline="IN",
+                            date_display=tgl_display,
+                            time_str=jam_training,
+                            venue_str=tempat_training,
+                            instructor_name=nama_instruktur,
+                            df_session=session_df,
+                            photo_bytes=foto_bytes
+                        )
+                        st.download_button(
+                            label=f"📥 PDF NAM Air ({sesi_label})",
+                            data=pdf_in_att,
+                            file_name=f"Absensi_IN_{selected_absensi_dist}_{selected_absensi_date}_{sesi_label.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal generate PDF IN: {e}")
+
+                # 3. Absensi File Excel (.xlsx)
+                with c_btn3:
+                    try:
+                        excel_att = generate_attendance_excel(
+                            date_display=tgl_display,
+                            time_str=jam_training,
+                            venue_str=tempat_training,
+                            instructor_name=nama_instruktur,
+                            df_session=session_df
+                        )
+                        st.download_button(
+                            label=f"📊 Excel (.xlsx) ({sesi_label})",
+                            data=excel_att,
+                            file_name=f"Absensi_{selected_absensi_dist}_{selected_absensi_date}_{sesi_label.replace(' ', '_')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal generate Excel: {e}")
 
         # ------------------- FITUR UNDUH ULANG SERTIFIKAT -------------------
         st.markdown("---")
