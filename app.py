@@ -67,7 +67,7 @@ else:
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
             # Ganti 'admin123' dengan PIN pilihan Anda jika diperlukan
-            if instructor_pin == "admin123":
+            if instructor_pin == "Indomiesoto1":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
@@ -115,7 +115,15 @@ if menu == "Ujian DG Awareness":
     with col1:
         full_name = st.text_input("Nama Lengkap*")
         nik = st.text_input("NIK / Employee ID*")
-        job_role = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
+        job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
+        
+        # Kolom dinamis jika peserta memilih "Lainnya"
+        if job_role_selected == "Lainnya":
+            custom_role = st.text_input("Sebutkan Jabatan / Unit Kerja Anda*")
+            job_role = custom_role.strip()
+        else:
+            job_role = job_role_selected
+
     with col2:
         company = st.text_input("Perusahaan / Mitra Kerja* (misal: PT Sriwijaya Air / PT Gapura)")
         dist_df = get_districts()
@@ -136,7 +144,7 @@ if menu == "Ujian DG Awareness":
         st.write("")
 
     if st.button("Submit Jawaban & Evaluasi Nilai", type="primary"):
-        if not full_name or not nik or not company or not selected_dist:
+        if not full_name or not nik or not company or not selected_dist or not job_role:
             st.error("Mohon lengkapi seluruh kolom Data Diri Peserta sebelum submit!")
         elif any(ans is None for ans in user_answers.values()):
             st.warning("Pastikan seluruh 25 soal telah dijawab!")
@@ -325,7 +333,6 @@ elif menu == "Dashboard Instruktur & Records":
         if passed_records.empty:
             st.info("Belum ada data peserta yang dinyatakan lulus untuk diunduh sertifikatnya.")
         else:
-            # Format opsi dropdown: NIK - Nama Lengkap - Distrik - Tanggal Training
             options_dict = {}
             for idx, r in passed_records.iterrows():
                 label = f"{r['nik']} - {r['full_name']} ({r['district']}) | Tgl: {r['training_date']}"
