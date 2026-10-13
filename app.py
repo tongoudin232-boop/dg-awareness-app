@@ -33,14 +33,12 @@ query_params = st.query_params
 if "cert" in query_params:
     cert_query = str(query_params["cert"]).strip()
     
-    # Ambil data dari database
     records_df = get_training_records()
     matched = records_df[
         (records_df['cert_no_sj'].astype(str) == cert_query) | 
         (records_df['cert_no_in'].astype(str) == cert_query)
     ]
     
-    # Header Banner Verifikasi
     col_vlogo1, col_vtitle, col_vlogo2 = st.columns([1.5, 5, 1.5])
     with col_vlogo1:
         if os.path.exists("logo_sriwijaya.png"):
@@ -85,10 +83,8 @@ if "cert" in query_params:
         try:
             cert_pdf = generate_certificate(
                 airline=airline_target,
-                name=str(rec['full_name']),
                 cert_no=str(cert_query),
-                company=str(rec['company']),
-                district=str(rec['district']),
+                name=str(rec['full_name']),
                 training_date_str=str(rec['training_date'])
             )
             st.download_button(
@@ -195,7 +191,6 @@ if menu == "Ujian DG Awareness":
         nik = st.text_input("NIK / Employee ID*")
         job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
         
-        # Munculkan form input tambahan jika memilih 'Lainnya'
         if job_role_selected == "Lainnya":
             custom_role = st.text_input("Sebutkan Jabatan / Unit Kerja Anda*")
             job_role = custom_role.strip()
@@ -210,26 +205,33 @@ if menu == "Ujian DG Awareness":
         training_date = st.date_input("Tanggal Pelaksanaan Training", date.today())
 
     st.subheader("2. Lembar Soal Ujian (25 Soal)")
-    user_answers = {}
-    for i, q in enumerate(QUESTIONS):
-        st.markdown(f"**Soal {i+1}:** {q['question']}")
-        user_answers[i] = st.radio(
-            f"Pilih jawaban untuk nomor {i+1}:",
-            options=q['options'],
-            key=f"q_{i}",
-            index=None
-        )
-        st.write("")
+    
+    # Bungkus formulir agar pilihan jawaban tidak ter-reset
+    with st.form("exam_form"):
+        user_answers = {}
+        for i, q in enumerate(QUESTIONS):
+            st.markdown(f"**Soal {i+1}:** {q['question']}")
+            user_answers[i] = st.radio(
+                f"Pilih jawaban untuk nomor {i+1}:",
+                options=q['options'],
+                key=f"q_{i}",
+                index=None
+            )
+            st.write("")
 
-    if st.button("Submit Jawaban & Evaluasi Nilai", type="primary"):
+        submit_btn = st.form_submit_button("Submit Jawaban & Evaluasi Nilai", type="primary")
+
+    if submit_btn:
         if not full_name or not nik or not company or not selected_dist or not job_role:
             st.error("Mohon lengkapi seluruh kolom Data Diri Peserta sebelum submit!")
-        elif any(ans is None for ans in user_answers.values()):
+        elif any(user_answers[i] is None for i in range(len(QUESTIONS))):
             st.warning("Pastikan seluruh 25 soal telah dijawab!")
         else:
             correct_count = 0
             for i, q in enumerate(QUESTIONS):
-                if user_answers[i] == q['answer']:
+                ans = str(user_answers[i]).strip().lower() if user_answers[i] is not None else ""
+                key = str(q['answer']).strip().lower()
+                if ans == key:
                     correct_count += 1
 
             score = correct_count * 4
@@ -243,19 +245,24 @@ if menu == "Ujian DG Awareness":
 
                 cert_no_sj = get_next_cert_number("SJ")
                 cert_no_in = get_next_cert_number("IN")
+                
+                exp_date = (training_date + relativedelta(months=24)).strftime("%Y-%m-%d")
 
-                save_training_record(
-                    full_name=full_name,
-                    nik=nik,
-                    job_role=job_role,
-                    company=company,
-                    district=dist_code,
-                    training_date=str(training_date),
-                    score=score,
-                    status="LULUS",
-                    cert_no_sj=cert_no_sj,
-                    cert_no_in=cert_no_in
-                )
+                # Format data dictionary sesuai database.py
+                record_payload = {
+                    'training_date': str(training_date),
+                    'full_name': full_name,
+                    'nik': nik,
+                    'job_role': job_role,
+                    'company': company,
+                    'district': dist_code,
+                    'score': score,
+                    'status': 'LULUS',
+                    'cert_no_sj': cert_no_sj,
+                    'cert_no_in': cert_no_in,
+                    'expiry_date': exp_date
+                }
+                save_training_record(record_payload)
 
                 st.subheader("Unduh Sertifikat Kelulusan")
                 col_d1, col_d2 = st.columns(2)
@@ -263,10 +270,8 @@ if menu == "Ujian DG Awareness":
                 try:
                     pdf_sj = generate_certificate(
                         airline="SJ",
-                        name=full_name,
                         cert_no=cert_no_sj,
-                        company=company,
-                        district=dist_code,
+                        name=full_name,
                         training_date_str=str(training_date)
                     )
                     with col_d1:
@@ -283,10 +288,8 @@ if menu == "Ujian DG Awareness":
                 try:
                     pdf_in = generate_certificate(
                         airline="IN",
-                        name=full_name,
                         cert_no=cert_no_in,
-                        company=company,
-                        district=dist_code,
+                        name=full_name,
                         training_date_str=str(training_date)
                     )
                     with col_d2:
@@ -302,18 +305,21 @@ if menu == "Ujian DG Awareness":
 
             else:
                 st.error(f"MOHON MAAF, Anda dinyatakan **BELUM LULUS** dengan Nilai: **{score} / 100** (Benar: {correct_count}/25). Passing grade: 80.")
-                save_training_record(
-                    full_name=full_name,
-                    nik=nik,
-                    job_role=job_role,
-                    company=company,
-                    district=dist_code,
-                    training_date=str(training_date),
-                    score=score,
-                    status="TIDAK LULUS",
-                    cert_no_sj="-",
-                    cert_no_in="-"
-                )
+                
+                record_payload = {
+                    'training_date': str(training_date),
+                    'full_name': full_name,
+                    'nik': nik,
+                    'job_role': job_role,
+                    'company': company,
+                    'district': dist_code,
+                    'score': score,
+                    'status': 'TIDAK LULUS',
+                    'cert_no_sj': '-',
+                    'cert_no_in': '-',
+                    'expiry_date': '-'
+                }
+                save_training_record(record_payload)
 
 
 # ==================== MENU 2: DASHBOARD INSTRUKTUR & RECORDS ====================
@@ -362,9 +368,6 @@ elif menu == "Dashboard Instruktur & Records":
                 if 'id' in to_del_records.columns:
                     for rec_id in to_del_records['id']:
                         c.execute("DELETE FROM training_records WHERE id = ?", (rec_id,))
-                elif 'cert_no_sj' in to_del_records.columns:
-                    for c_no in to_del_records['cert_no_sj']:
-                        c.execute("DELETE FROM training_records WHERE cert_no_sj = ?", (c_no,))
                 conn.commit()
                 conn.close()
                 st.toast(f"{len(to_del_records)} data berhasil dihapus!", icon="✅")
@@ -431,10 +434,8 @@ elif menu == "Dashboard Instruktur & Records":
                 try:
                     re_pdf_sj = generate_certificate(
                         airline="SJ",
-                        name=str(selected_candidate['full_name']),
                         cert_no=str(selected_candidate['cert_no_sj']),
-                        company=str(selected_candidate['company']),
-                        district=str(selected_candidate['district']),
+                        name=str(selected_candidate['full_name']),
                         training_date_str=str(selected_candidate['training_date'])
                     )
                     st.download_button(
@@ -451,10 +452,8 @@ elif menu == "Dashboard Instruktur & Records":
                 try:
                     re_pdf_in = generate_certificate(
                         airline="IN",
-                        name=str(selected_candidate['full_name']),
                         cert_no=str(selected_candidate['cert_no_in']),
-                        company=str(selected_candidate['company']),
-                        district=str(selected_candidate['district']),
+                        name=str(selected_candidate['full_name']),
                         training_date_str=str(selected_candidate['training_date'])
                     )
                     st.download_button(
