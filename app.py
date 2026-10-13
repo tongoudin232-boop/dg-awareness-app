@@ -244,14 +244,9 @@ if menu == "Ujian DG Awareness":
             dist_code = selected_dist.split(" - ")[0]
             passed = score >= 80
 
-            st.markdown("---")
             if passed:
-                st.balloons()
-                st.success(f"🎉 SELAMAT! Anda dinyatakan **LULUS** dengan Nilai: **{score} / 100** (Benar: {correct_count}/25).")
-
                 cert_no_sj = get_next_cert_number("SJ")
                 cert_no_in = get_next_cert_number("IN")
-                
                 exp_date = (training_date + relativedelta(months=24)).strftime("%Y-%m-%d")
 
                 record_payload = {
@@ -270,47 +265,80 @@ if menu == "Ujian DG Awareness":
                 }
                 save_training_record(record_payload)
 
-                st.subheader("Unduh Sertifikat Kelulusan")
-                col_d1, col_d2 = st.columns(2)
+                pdf_sj = generate_certificate(
+                    airline="SJ",
+                    cert_no=cert_no_sj,
+                    name=full_name,
+                    training_date_str=str(training_date)
+                )
 
-                try:
-                    pdf_sj = generate_certificate(
-                        airline="SJ",
-                        cert_no=cert_no_sj,
-                        name=full_name,
-                        training_date_str=str(training_date)
-                    )
-                    with col_d1:
-                        st.download_button(
-                            label="📥 Unduh Sertifikat Sriwijaya Air (SJ)",
-                            data=pdf_sj,
-                            file_name=f"Sertifikat_SJ_{full_name.replace(' ', '_')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                except Exception as e:
-                    st.error(f"Gagal generate sertifikat SJ: {e}")
+                pdf_in = generate_certificate(
+                    airline="IN",
+                    cert_no=cert_no_in,
+                    name=full_name,
+                    training_date_str=str(training_date)
+                )
 
-                try:
-                    pdf_in = generate_certificate(
-                        airline="IN",
-                        cert_no=cert_no_in,
-                        name=full_name,
-                        training_date_str=str(training_date)
-                    )
-                    with col_d2:
-                        st.download_button(
-                            label="📥 Unduh Sertifikat NAM Air (IN)",
-                            data=pdf_in,
-                            file_name=f"Sertifikat_IN_{full_name.replace(' ', '_')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                except Exception as e:
-                    st.error(f"Gagal generate sertifikat IN: {e}")
-
+                # Simpan status kelulusan dan file PDF ke session_state agar tidak hilang saat diunduh
+                st.session_state['exam_result'] = {
+                    'passed': True,
+                    'score': score,
+                    'correct_count': correct_count,
+                    'full_name': full_name,
+                    'pdf_sj': pdf_sj,
+                    'pdf_in': pdf_in
+                }
             else:
-                st.error(f"MOHON MAAF, Anda dinyatakan **BELUM LULUS** dengan Nilai: **{score} / 100** (Benar: {correct_count}/25). Passing grade: 80.")
+                record_payload = {
+                    'training_date': str(training_date),
+                    'full_name': full_name,
+                    'nik': nik,
+                    'phone': phone,
+                    'job_role': job_role,
+                    'company': company,
+                    'district': dist_code,
+                    'score': score,
+                    'status': 'TIDAK LULUS',
+                    'cert_no_sj': '-',
+                    'cert_no_in': '-',
+                    'expiry_date': '-'
+                }
+                save_training_record(record_payload)
+                st.session_state['exam_result'] = {
+                    'passed': False,
+                    'score': score,
+                    'correct_count': correct_count
+                }
+
+    # Tampilkan hasil ujian dan tombol unduh di luar form secara persisten
+    if 'exam_result' in st.session_state:
+        res = st.session_state['exam_result']
+        st.markdown("---")
+        if res['passed']:
+            st.balloons()
+            st.success(f"🎉 SELAMAT! Anda dinyatakan **LULUS** dengan Nilai: **{res['score']} / 100** (Benar: {res['correct_count']}/25).")
+            st.subheader("Unduh Sertifikat Kelulusan")
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.download_button(
+                    label="📥 Unduh Sertifikat Sriwijaya Air (SJ)",
+                    data=res['pdf_sj'],
+                    file_name=f"Sertifikat_SJ_{res['full_name'].replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="btn_download_sj"
+                )
+            with col_d2:
+                st.download_button(
+                    label="📥 Unduh Sertifikat NAM Air (IN)",
+                    data=res['pdf_in'],
+                    file_name=f"Sertifikat_IN_{res['full_name'].replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="btn_download_in"
+                )
+        else:
+            st.error(f"MOHON MAAF, Anda dinyatakan **BELUM LULUS** dengan Nilai: **{res['score']} / 100** (Benar: {res['correct_count']}/25). Passing grade: 80.")
                 
                 record_payload = {
                     'training_date': str(training_date),
