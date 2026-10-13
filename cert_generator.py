@@ -1,9 +1,23 @@
 import io
 import os
 import qrcode
+from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from pypdf import PdfReader, PdfWriter
+
+def format_custom_date(date_str):
+    """
+    Mengubah format tanggal input (YYYY-MM-DD atau variasi lainnya)
+    menjadi format: '13 October 2026'
+    """
+    try:
+        clean_date_str = str(date_str)[:10].strip()
+        dt = datetime.strptime(clean_date_str, "%Y-%m-%d")
+        # %d = tanggal dua digit/hari, %B = nama bulan penuh (English), %Y = 4 digit tahun
+        return dt.strftime("%d %B %Y")
+    except Exception:
+        return str(date_str)
 
 def create_qr_file(airline, cert_no, name, date_str):
     # Link URL verifikasi online resmi yang akan dibuka saat scan QR
@@ -33,7 +47,7 @@ def create_overlay(airline, cert_no, name, training_date_str, page_width, page_h
     center_x = x_offset + (page_width / 2.0)
 
     # -----------------------------------------------------------------
-    # 1. NOMOR SERTIFIKAT (Diturunkan pas ke tengah ruang kosong)
+    # 1. NOMOR SERTIFIKAT
     # -----------------------------------------------------------------
     can.setFont("Helvetica-Bold", 20)
     can.setFillColor(COLOR_TEXT_DARK)
@@ -41,7 +55,7 @@ def create_overlay(airline, cert_no, name, training_date_str, page_width, page_h
     can.drawCentredString(center_x, y_cert, f"No. {cert_no}")
 
     # -----------------------------------------------------------------
-    # 2. NAMA LENGKAP (Diturunkan sedikit ke tengah bidang)
+    # 2. NAMA LENGKAP
     # -----------------------------------------------------------------
     can.setFont("Helvetica-Bold", 28)
     can.setFillColor(COLOR_GOLD)
@@ -49,15 +63,17 @@ def create_overlay(airline, cert_no, name, training_date_str, page_width, page_h
     can.drawCentredString(center_x, y_name, name.upper())
 
     # -----------------------------------------------------------------
-    # 3. KOTA DAN TANGGAL (Tetap di posisi yang sudah pas)
+    # 3. KOTA DAN TANGGAL (Ukuran disesuaikan jadi 13 & format '13 October 2026')
     # -----------------------------------------------------------------
-    can.setFont("Helvetica", 18)
+    formatted_date = format_custom_date(training_date_str)
+    
+    can.setFont("Helvetica", 13)
     can.setFillColor(COLOR_TEXT_DARK)
-    y_date = y_offset + (page_height * 0.275)
-    can.drawCentredString(center_x, y_date, f"Tangerang, {training_date_str}")
+    y_date = y_offset + (page_height * 0.280)
+    can.drawCentredString(center_x, y_date, f"Tangerang, {formatted_date}")
 
     # -----------------------------------------------------------------
-    # 4. QR CODE KADIV CARGO (Scan langsung menuju URL verifikasi)
+    # 4. QR CODE KADIV CARGO
     # -----------------------------------------------------------------
     qr_path = create_qr_file(airline, cert_no, name, training_date_str)
     qr_size = 80
@@ -66,7 +82,6 @@ def create_overlay(airline, cert_no, name, training_date_str, page_width, page_h
 
     if os.path.exists(qr_path):
         can.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size, mask=None)
-        # Hapus file temporary QR setelah digambar ke canvas
         try:
             os.remove(qr_path)
         except Exception:
