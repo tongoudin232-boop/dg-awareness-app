@@ -206,7 +206,6 @@ if menu == "Ujian DG Awareness":
 
     st.subheader("2. Lembar Soal Ujian (25 Soal)")
     
-    # Bungkus formulir agar pilihan jawaban tidak ter-reset
     with st.form("exam_form"):
         user_answers = {}
         for i, q in enumerate(QUESTIONS):
@@ -229,9 +228,17 @@ if menu == "Ujian DG Awareness":
         else:
             correct_count = 0
             for i, q in enumerate(QUESTIONS):
-                ans = str(user_answers[i]).strip().lower() if user_answers[i] is not None else ""
-                key = str(q['answer']).strip().lower()
-                if ans == key:
+                selected_val = user_answers[i]
+                
+                # Mendapatkan jawaban yang benar baik berupa indeks angka maupun string
+                raw_ans = q['answer']
+                if isinstance(raw_ans, int):
+                    correct_val = q['options'][raw_ans]
+                else:
+                    correct_val = str(raw_ans)
+                
+                # Bandingkan jawaban peserta dengan kunci jawaban
+                if str(selected_val).strip().lower() == str(correct_val).strip().lower():
                     correct_count += 1
 
             score = correct_count * 4
@@ -248,7 +255,6 @@ if menu == "Ujian DG Awareness":
                 
                 exp_date = (training_date + relativedelta(months=24)).strftime("%Y-%m-%d")
 
-                # Format data dictionary sesuai database.py
                 record_payload = {
                     'training_date': str(training_date),
                     'full_name': full_name,
@@ -368,6 +374,9 @@ elif menu == "Dashboard Instruktur & Records":
                 if 'id' in to_del_records.columns:
                     for rec_id in to_del_records['id']:
                         c.execute("DELETE FROM training_records WHERE id = ?", (rec_id,))
+                elif 'cert_no_sj' in to_del_records.columns:
+                    for c_no in to_del_records['cert_no_sj']:
+                        c.execute("DELETE FROM training_records WHERE cert_no_sj = ?", (c_no,))
                 conn.commit()
                 conn.close()
                 st.toast(f"{len(to_del_records)} data berhasil dihapus!", icon="✅")
