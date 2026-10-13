@@ -143,7 +143,7 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            if instructor_pin == "Indomiesoto1":
+            if instructor_pin == "admin123":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
@@ -279,7 +279,6 @@ if menu == "Ujian DG Awareness":
                     training_date_str=str(training_date)
                 )
 
-                # Simpan status kelulusan dan file PDF ke session_state agar tidak hilang saat diunduh
                 st.session_state['exam_result'] = {
                     'passed': True,
                     'score': score,
@@ -310,7 +309,6 @@ if menu == "Ujian DG Awareness":
                     'correct_count': correct_count
                 }
 
-    # Tampilkan hasil ujian dan tombol unduh di luar form secara persisten
     if 'exam_result' in st.session_state:
         res = st.session_state['exam_result']
         st.markdown("---")
@@ -339,22 +337,6 @@ if menu == "Ujian DG Awareness":
                 )
         else:
             st.error(f"MOHON MAAF, Anda dinyatakan **BELUM LULUS** dengan Nilai: **{res['score']} / 100** (Benar: {res['correct_count']}/25). Passing grade: 80.")
-                
-                record_payload = {
-                    'training_date': str(training_date),
-                    'full_name': full_name,
-                    'nik': nik,
-                    'phone': phone,
-                    'job_role': job_role,
-                    'company': company,
-                    'district': dist_code,
-                    'score': score,
-                    'status': 'TIDAK LULUS',
-                    'cert_no_sj': '-',
-                    'cert_no_in': '-',
-                    'expiry_date': '-'
-                }
-                save_training_record(record_payload)
 
 
 # ==================== MENU 2: DASHBOARD INSTRUKTUR & RECORDS ====================
@@ -489,7 +471,7 @@ elif menu == "Dashboard Instruktur & Records":
                 num_sessions = 1
                 st.write("📌 *Mode Online: Seluruh peserta digabung ke dalam 1 lembar absensi.*")
 
-            # Konversi Tanggal ke Format Bahasa Indonesia (contoh: Selasa, 13 Oktober 2026)
+            # Konversi Tanggal ke Format Bahasa Indonesia
             try:
                 dt_obj = datetime.strptime(str(selected_absensi_date)[:10], "%Y-%m-%d")
                 hari_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][dt_obj.weekday()]
@@ -500,14 +482,13 @@ elif menu == "Dashboard Instruktur & Records":
 
             foto_bytes = foto_uploaded.getvalue() if foto_uploaded is not None else None
 
-            # Step 3: Tombol Ekspor PDF & XLSX untuk Masing-Masing Sesi
+            # Step 3: Tombol Ekspor PDF & XLSX
             for s_idx, session_df in enumerate(sessions):
                 sesi_label = f"Sesi {s_idx + 1}" if num_sessions > 1 else "Dokumen Absensi"
                 st.markdown(f"#### 📄 Unduh {sesi_label} ({len(session_df)} Peserta)")
 
                 c_btn1, c_btn2, c_btn3 = st.columns(3)
 
-                # 1. Absensi Sriwijaya Air (SJ)
                 with c_btn1:
                     try:
                         pdf_sj_att = generate_attendance_pdf(
@@ -529,7 +510,6 @@ elif menu == "Dashboard Instruktur & Records":
                     except Exception as e:
                         st.error(f"Gagal generate PDF SJ: {e}")
 
-                # 2. Absensi NAM Air (IN)
                 with c_btn2:
                     try:
                         pdf_in_att = generate_attendance_pdf(
@@ -551,7 +531,6 @@ elif menu == "Dashboard Instruktur & Records":
                     except Exception as e:
                         st.error(f"Gagal generate PDF IN: {e}")
 
-                # 3. Absensi File Excel (.xlsx)
                 with c_btn3:
                     try:
                         excel_att = generate_attendance_excel(
