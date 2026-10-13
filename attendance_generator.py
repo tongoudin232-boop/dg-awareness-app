@@ -12,10 +12,13 @@ from reportlab.lib.units import cm
 
 def generate_attendance_pdf(airline, date_display, time_str, venue_str, instructor_name, df_session, photo_bytes=None):
     """
-    Menghasilkan dokumen PDF Daftar Kehadiran sesuai format resmi Sriwijaya Air / NAM Air.
+    Menghasilkan dokumen PDF Daftar Kehadiran resmi Sriwijaya Air / NAM Air
+    lengkap dengan tanda tangan instruktur dan gambar dokumentasi.
     """
+    # 1. Pastikan peserta unik (tidak ada duplikat berdasarkan NIK)
+    df_clean = df_session.drop_duplicates(subset=['nik']).reset_index(drop=True)
+
     buffer = io.BytesIO()
-    # Margin A4: 1.5 cm
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
@@ -54,8 +57,22 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         leading=10,
         alignment=1
     )
+    style_sign_name = ParagraphStyle(
+        'SignName',
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=12,
+        alignment=1
+    )
+    style_sign_title = ParagraphStyle(
+        'SignTitle',
+        fontName='Helvetica',
+        fontSize=9,
+        leading=12,
+        alignment=1
+    )
 
-    # 1. Header (Logo di kiri, Teks Judul di tengah/kanan)
+    # 1. Header Logo & Judul
     logo_filename = "logo_sriwijaya.png" if airline == "SJ" else "logo_namair.png"
     logo_flowable = ""
     if os.path.exists(logo_filename):
@@ -72,7 +89,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
     story.append(header_table)
     story.append(Spacer(1, 0.4*cm))
 
-    # 2. Metadata Training (Hari/Tanggal, Pukul, Tempat)
+    # 2. Metadata Training
     info_data = [
         [Paragraph("<b>Hari / Tanggal</b>", style_info), Paragraph(f": {date_display}", style_info)],
         [Paragraph("<b>Pukul</b>", style_info), Paragraph(f": {time_str}", style_info)],
@@ -87,7 +104,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
     story.append(info_table)
     story.append(Spacer(1, 0.4*cm))
 
-    # 3. Tabel Data Peserta
+    # 3. Tabel Peserta
     table_rows = [
         [
             Paragraph("<b>NO</b>", style_cell_header),
@@ -98,7 +115,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         ]
     ]
 
-    for idx, row in df_session.reset_index(drop=True).iterrows():
+    for idx, row in df_clean.iterrows():
         table_rows.append([
             Paragraph(str(idx + 1), style_cell_header),
             Paragraph(str(row.get('full_name', '')).upper(), style_cell),
@@ -120,7 +137,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
     story.append(table_peserta)
     story.append(Spacer(1, 0.5*cm))
 
-    # 4. Tanda Tangan Instruktur & Bukti Foto Kegiatan
+    # 4. Dokumentasi & Tanda Tangan Instruktur
     closing_elements = []
     
     if photo_bytes is not None:
@@ -133,21 +150,30 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
             closing_elements.append(Paragraph("<b>Dokumentasi Training:</b>", style_info))
             closing_elements.append(Spacer(1, 0.2*cm))
             closing_elements.append(rl_img)
-            closing_elements.append(Spacer(1, 0.4*cm))
+            closing_elements.append(Spacer(1, 0.3*cm))
         except Exception:
             pass
 
+    # Ambil gambar tanda tangan jika ada file ttd_instruktur.png
+    ttd_image = ""
+    if os.path.exists("ttd_instruktur.png"):
+        ttd_image = RLImage("ttd_instruktur.png", width=3.5*cm, height=2.0*cm)
+    else:
+        ttd_image = Spacer(1, 1.8*cm)
+
+    # Format tanda tangan instruktur
+    clean_inst_name = str(instructor_name).replace("<b>", "").replace("</b>", "").upper().strip()
     sign_data = [
-        ["", "Instruktur,"],
-        ["", ""],
-        ["", ""],
-        ["", ""],
-        ["", f"<b>{instructor_name.upper()}</b>"]
+        ["", Paragraph("Instruktur,", style_sign_title)],
+        ["", ttd_image],
+        ["", Paragraph(f"<u><b>{clean_inst_name}</b></u>", style_sign_name)]
     ]
     sign_table = Table(sign_data, colWidths=[11*cm, 7*cm])
     sign_table.setStyle(TableStyle([
         ('ALIGN', (1,0), (1,-1), 'CENTER'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (1,0), (1,-1), 2),
+        ('TOPPADDING', (1,0), (1,-1), 2),
     ]))
     closing_elements.append(sign_table)
 
@@ -159,8 +185,11 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
 
 def generate_attendance_excel(date_display, time_str, venue_str, instructor_name, df_session):
     """
-    Menghasilkan file Excel (.xlsx) Daftar Kehadiran.
+    Menghasilkan file Excel (.xlsx) Daftar Kehadiran tanpa duplikat.
     """
+    df_clean = df_session.drop_duplicates(subset=['nik']).reset_index(drop=True)
+    clean_inst_name = str(instructor_name).replace("<b>", "").replace("</b>", "").upper().strip()
+    
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         meta_df = pd.DataFrame([
@@ -168,13 +197,13 @@ def generate_attendance_excel(date_display, time_str, venue_str, instructor_name
             [f"Hari / Tanggal: {date_display}", ""],
             [f"Pukul: {time_str}", ""],
             [f"Tempat: {venue_str}", ""],
-            [f"Instruktur: {instructor_name}", ""],
+            [f"Instruktur: {clean_inst_name}", ""],
             ["", ""]
         ])
         meta_df.to_excel(writer, index=False, header=False, sheet_name='Absensi', startrow=0)
 
         rows = []
-        for idx, r in df_session.reset_index(drop=True).iterrows():
+        for idx, r in df_clean.iterrows():
             rows.append({
                 "NO": idx + 1,
                 "Nama": str(r.get('full_name', '')).upper(),
