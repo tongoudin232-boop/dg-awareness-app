@@ -5,11 +5,44 @@ from dateutil.relativedelta import relativedelta
 
 DB_FILE = 'dg_training.db'
 
+def fix_districts_table_schema():
+    """Memastikan tabel districts tidak memiliki batasan UNIQUE pada code."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    try:
+        # Cek definisi schema SQL asli dari tabel districts
+        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='districts'")
+        row = c.fetchone()
+        
+        # Jika tabel districts ada dan masih memuat kata 'UNIQUE' pada kolom code
+        if row and ('UNIQUE' in row[0].upper()):
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS districts_temp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code TEXT,
+                    name TEXT,
+                    category TEXT,
+                    last_training_date TEXT,
+                    next_due_date TEXT
+                )
+            ''')
+            c.execute('''
+                INSERT INTO districts_temp (id, code, name, category, last_training_date, next_due_date)
+                SELECT id, code, name, category, last_training_date, next_due_date FROM districts
+            ''')
+            c.execute("DROP TABLE districts")
+            c.execute("ALTER TABLE districts_temp RENAME TO districts")
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+    finally:
+        conn.close()
+
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # 1. Tabel Master Distrik (tanpa batasan UNIQUE agar kode kembar diperbolehkan)
+    # 1. Tabel Master Distrik (tanpa batasan UNIQUE pada code)
     c.execute('''
         CREATE TABLE IF NOT EXISTS districts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,11 +54,11 @@ def init_db():
         )
     ''')
 
-    # 2. Cek apakah tabel districts sudah pernah memiliki data
+    # 2. Cek apakah tabel districts sudah pernah diisi
     c.execute("SELECT COUNT(*) FROM districts")
     count = c.fetchone()[0]
 
-    # Hanya tambahkan data dasar jika tabel benar-benar kosong pertama kali
+    # Hanya isi data bawaan jika database baru & masih kosong total
     if count == 0:
         default_districts = [
             ('CGK', 'Cengkareng', 'Sriwijaya Air'),
@@ -73,6 +106,9 @@ def init_db():
     conn.commit()
     conn.close()
 
+    # Jalankan pemeriksaan & perbaikan schema tabel
+    fix_districts_table_schema()
+
 def get_districts():
     """Mengambil seluruh data distrik terdaftar urut alfabet A-Z berdasarkan kode"""
     conn = sqlite3.connect(DB_FILE)
@@ -113,7 +149,6 @@ def save_training_record(record_data):
         record_data['expiry_date']
     ))
 
-    # Jika peserta lulus, perbarui tanggal training distrik
     if record_data['status'] == 'LULUS':
         t_date = record_data['training_date']
         dt_obj = datetime.strptime(t_date[:10], "%Y-%m-%d").date()
@@ -135,10 +170,6 @@ def get_training_records():
     return df
 
 def get_next_cert_number(airline):
-    """
-    Format nomor sertifikat: YYMMxxxx (contoh: 26100014)
-    Sequence otomatis reset setiap siklus 24 bulan dari batch pertama.
-    """
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     now = datetime.now()

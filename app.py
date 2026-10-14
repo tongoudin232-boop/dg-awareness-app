@@ -12,7 +12,8 @@ from database import (
     get_districts,
     add_district,
     get_training_records,
-    get_next_cert_number
+    get_next_cert_number,
+    fix_districts_table_schema
 )
 from exam_data import QUESTIONS
 from cert_generator import generate_certificate
@@ -664,7 +665,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
     # -------------------------------------------------------------
-    # FITUR 1: EDIT MANUAL CODE, NAME, & CATEGORY (ANTI-RESET / PASTI TERSIMPAN)
+    # FITUR 1: EDIT MANUAL CODE, NAME, & CATEGORY (ANTI-RESET / AMAN INTEGRITY)
     # -------------------------------------------------------------
     with st.expander("✏️ **Klik di sini untuk Edit Manual Data Distrik (Code, Name, Category)**", expanded=True):
         if not dist_df.empty:
@@ -691,18 +692,34 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                 if btn_save_manual:
                     conn = sqlite3.connect('dg_training.db')
                     c = conn.cursor()
-                    c.execute("""
-                        UPDATE districts 
-                        SET code = ?, name = ?, category = ? 
-                        WHERE id = ?
-                    """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), int(cur_data['id'])))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"✅ Data {edit_code.strip().upper()} berhasil diperbarui secara permanen!")
-                    st.rerun()
+                    try:
+                        c.execute("""
+                            UPDATE districts 
+                            SET code = ?, name = ?, category = ? 
+                            WHERE id = ?
+                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), int(cur_data['id'])))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"✅ Data {edit_code.strip().upper()} berhasil diperbarui secara permanen!")
+                        st.rerun()
+                    except sqlite3.IntegrityError:
+                        conn.close()
+                        # Tangani jika tabel lama masih mengunci batasan UNIQUE
+                        fix_districts_table_schema()
+                        conn2 = sqlite3.connect('dg_training.db')
+                        c2 = conn2.cursor()
+                        c2.execute("""
+                            UPDATE districts 
+                            SET code = ?, name = ?, category = ? 
+                            WHERE id = ?
+                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), int(cur_data['id'])))
+                        conn2.commit()
+                        conn2.close()
+                        st.success(f"✅ Database disesuaikan & Data {edit_code.strip().upper()} berhasil disimpan!")
+                        st.rerun()
 
     st.markdown("---")
-    st.caption("💡 **Petunjuk Tabel:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk ubah jadwal recurrent, lalu klik tombol **Simpan Tanggal Recurrent** di bawah.")
+    st.caption("💡 **Petunjuk Tabel:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk ubah tanggal recurrent, lalu klik tombol **Simpan Tanggal Recurrent** di bawah.")
 
     # 2. Render Data Editor untuk Tanggal & Hapus Distrik
     edited_dist = st.data_editor(
@@ -735,7 +752,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                 new_last = str(r['last_training_date'])[:10] if pd.notnull(r['last_training_date']) and str(r['last_training_date']) not in ['None', 'NaT'] else None
                 new_due = str(r['next_due_date'])[:10] if pd.notnull(r['next_due_date']) and str(r['next_due_date']) not in ['None', 'NaT'] else None
 
-                # Hitung otomatis reminder 24 bulan jika Last Training diisi tapi Due Date kosong
+                # Otomatis isi reminder 24 bulan jika Last Training diisi tapi Due Date kosong
                 if new_last and not new_due:
                     try:
                         dt_calc = datetime.strptime(new_last, "%Y-%m-%d").date()
