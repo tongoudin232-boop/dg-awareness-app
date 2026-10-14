@@ -667,7 +667,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
-    st.caption("💡 **Penting:** Setelah mengedit sel (Code, Name, Category, Tanggal), **tekan ENTER** agar garis merah hilang, lalu klik tombol **Simpan Seluruh Perubahan Data**.")
+    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom yang ingin diedit (Code, Name, Category, atau Tanggal). Setelah mengetik, **tekan ENTER**, lalu klik tombol **Simpan Seluruh Perubahan Data**.")
 
     # 2. Render Data Editor
     edited_dist = st.data_editor(
@@ -695,11 +695,9 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             conn = sqlite3.connect('dg_training.db')
             c = conn.cursor()
             
-            # Buat lookup data awal berdasarkan ID
             orig_dict = dist_df.set_index('id').to_dict('index')
             updated_count = 0
 
-            # Iterasi langsung dari DataFrame hasil editan di layar
             for _, r in edited_dist.iterrows():
                 target_id = r['id']
                 if target_id not in orig_dict:
@@ -717,7 +715,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                 orig_last = str(orig_row['last_training_date'])[:10] if pd.notnull(orig_row['last_training_date']) and str(orig_row['last_training_date']) != 'None' else None
                 orig_due = str(orig_row['next_due_date'])[:10] if pd.notnull(orig_row['next_due_date']) and str(orig_row['next_due_date']) != 'None' else None
 
-                # Cek apakah baris ini mengalami perubahan
+                # Cek jika terdapat perubahan data
                 if (new_code != str(orig_row['code']).strip().upper() or
                     new_name != str(orig_row['name']).strip() or
                     new_cat != str(orig_row['category']).strip() or
@@ -728,8 +726,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     if new_last and not new_due:
                         try:
                             dt_calc = datetime.strptime(new_last, "%Y-%m-%d").date()
-                            str_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
-                            new_due = str_due
+                            new_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
                         except Exception:
                             pass
 
