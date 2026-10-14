@@ -12,7 +12,9 @@ from database import (
     get_districts,
     add_district,
     get_training_records,
-    get_next_cert_number
+    get_next_cert_number,
+    reset_cert_sequence,
+    clear_all_training_records
 )
 from exam_data import QUESTIONS
 from cert_generator import generate_certificate
@@ -28,7 +30,7 @@ st.set_page_config(
 # Inisialisasi Database
 init_db()
 
-# Fungsi mandiri untuk melepas constraint UNIQUE lama jika ada
+# Melepas constraint UNIQUE lama pada tabel districts jika ada di file db eksisting
 def ensure_safe_districts_table():
     try:
         conn = sqlite3.connect('dg_training.db')
@@ -383,11 +385,52 @@ if menu == "Ujian DG Awareness":
 # ==================== MENU 2: DASHBOARD INSTRUKTUR & RECORDS ====================
 elif menu == "Dashboard Instruktur & Records":
     st.title("📊 Training Records & Audit Report")
+
+    # -------------------------------------------------------------
+    # PANEL RESET NOMOR SERTIFIKAT & PEMBERSIHAN DATA TRIAL
+    # -------------------------------------------------------------
+    with st.expander("⚙️ **Pengaturan Khusus & Reset Data Percobaan (Trial)**", expanded=False):
+        c_tool1, c_tool2 = st.columns(2)
+        with c_tool1:
+            st.markdown("**1. Reset Nomor Sertifikat ke Urutan 0001**")
+            st.caption("Memulai ulang penomoran sertifikat resmi SJ & IN dari nomor urut 0001.")
+            if st.button("🔄 Reset Nomor Sertifikat ke 1", type="primary"):
+                reset_cert_sequence()
+                st.success("✅ Nomor sertifikat berhasil di-reset! Sertifikat berikutnya akan terbit dengan nomor urut 0001.")
+                st.rerun()
+
+        with c_tool2:
+            st.markdown("**2. Kosongkan Seluruh Data Percobaan (Trial)**")
+            st.caption("Menghapus seluruh riwayat ujian yang ada di tabel ini.")
+            if st.button("⚠️ Hapus Seluruh Data Training", type="secondary"):
+                clear_all_training_records()
+                st.toast("Seluruh record training berhasil dibersihkan!", icon="🗑️")
+                st.rerun()
+
+    st.markdown("---")
+
     records_df = get_training_records()
 
     if records_df.empty:
-        st.info("Belum ada data riwayat training.")
+        st.info("Belum ada data riwayat training. (Tabel bersih)")
     else:
+        # Pilihan Hapus Spesifik Berdasarkan ID Peserta
+        with st.expander("🗑️ **Hapus Record Spesifik (Berdasarkan ID / Nama)**", expanded=False):
+            rec_options = {
+                f"ID {r['id']} | {r['full_name']} ({r['district']}) - Tgl: {r['training_date']}": r['id']
+                for _, r in records_df.iterrows()
+            }
+            selected_to_delete = st.selectbox("Pilih data yang ingin dihapus permanen:", list(rec_options.keys()))
+            if st.button("Hapus Data Terpilih Ini", type="primary"):
+                del_id = rec_options[selected_to_delete]
+                conn = sqlite3.connect('dg_training.db')
+                c = conn.cursor()
+                c.execute("DELETE FROM training_records WHERE id = ?", (del_id,))
+                conn.commit()
+                conn.close()
+                st.success("✅ Data berhasil dihapus permanen dari database!")
+                st.rerun()
+
         col1, col2 = st.columns(2)
         with col1:
             filter_dist = st.multiselect("Filter Distrik", options=records_df['district'].unique())
@@ -400,45 +443,12 @@ elif menu == "Dashboard Instruktur & Records":
         if filter_role:
             filtered_df = filtered_df[filtered_df['job_role'].isin(filter_role)]
 
-        filtered_df["Hapus"] = False
-
-        st.caption("Centang kotak pada kolom **Hapus**, lalu klik tombol merah di bawah untuk menghapus record percobaan.")
-
-        col_cfg = {
-            "Hapus": st.column_config.CheckboxColumn("Hapus", default=False)
-        }
-        if "id" in filtered_df.columns:
-            col_cfg["id"] = st.column_config.NumberColumn("ID", disabled=True)
-
-        edited_records = st.data_editor(
-            filtered_df,
-            column_config=col_cfg,
-            disabled=[col for col in filtered_df.columns if col != "Hapus"],
-            hide_index=True,
-            use_container_width=True
-        )
-
-        to_del_records = edited_records[edited_records["Hapus"] == True]
-        if not to_del_records.empty:
-            if st.button(f"🗑️ Hapus {len(to_del_records)} Data Record Terpilih", type="primary"):
-                conn = sqlite3.connect('dg_training.db')
-                c = conn.cursor()
-                if 'id' in to_del_records.columns:
-                    for rec_id in to_del_records['id']:
-                        c.execute("DELETE FROM training_records WHERE id = ?", (rec_id,))
-                elif 'cert_no_sj' in to_del_records.columns:
-                    for c_no in to_del_records['cert_no_sj']:
-                        c.execute("DELETE FROM training_records WHERE cert_no_sj = ?", (c_no,))
-                conn.commit()
-                conn.close()
-                st.toast(f"{len(to_del_records)} data berhasil dihapus!", icon="✅")
-                st.rerun()
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
         # Ekspor Excel & CSV Seluruh Record
         output = io.BytesIO()
-        export_df = filtered_df.drop(columns=['Hapus'], errors='ignore')
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            export_df.to_excel(writer, index=False, sheet_name='Training_Records')
+            filtered_df.to_excel(writer, index=False, sheet_name='Training_Records')
         excel_data = output.getvalue()
 
         col_exp1, col_exp2 = st.columns(2)
@@ -453,7 +463,7 @@ elif menu == "Dashboard Instruktur & Records":
         with col_exp2:
             st.download_button(
                 label="📥 Ekspor Data ke CSV (.csv)",
-                data=export_df.to_csv(index=False).encode('utf-8'),
+                data=filtered_df.to_csv(index=False).encode('utf-8'),
                 file_name=f"DG_Training_Records_{date.today().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
                 use_container_width=True
@@ -501,7 +511,6 @@ elif menu == "Dashboard Instruktur & Records":
             with c_meta5:
                 foto_uploaded = st.file_uploader("Upload Foto Bukti Pelatihan (JPG / PNG):", type=["jpg", "jpeg", "png"])
 
-            # Logika Sesi Peserta
             if mode_training == "Offline":
                 batch_size = 25
                 sessions = [candidates_att.iloc[i:i + batch_size] for i in range(0, total_peserta, batch_size)]
@@ -512,7 +521,6 @@ elif menu == "Dashboard Instruktur & Records":
                 num_sessions = 1
                 st.write("📌 *Mode Online: Seluruh peserta digabung ke dalam 1 lembar absensi.*")
 
-            # Konversi Tanggal ke Format Bahasa Indonesia
             try:
                 dt_obj = datetime.strptime(str(selected_absensi_date)[:10], "%Y-%m-%d")
                 hari_id = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][dt_obj.weekday()]
