@@ -12,8 +12,7 @@ from database import (
     get_districts,
     add_district,
     get_training_records,
-    get_next_cert_number,
-    fix_districts_table_schema
+    get_next_cert_number
 )
 from exam_data import QUESTIONS
 from cert_generator import generate_certificate
@@ -28,6 +27,37 @@ st.set_page_config(
 
 # Inisialisasi Database
 init_db()
+
+# Fungsi mandiri untuk melepas constraint UNIQUE lama jika ada
+def ensure_safe_districts_table():
+    try:
+        conn = sqlite3.connect('dg_training.db')
+        c = conn.cursor()
+        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='districts'")
+        row = c.fetchone()
+        if row and ('UNIQUE' in row[0].upper()):
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS districts_temp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code TEXT,
+                    name TEXT,
+                    category TEXT,
+                    last_training_date TEXT,
+                    next_due_date TEXT
+                )
+            ''')
+            c.execute('''
+                INSERT INTO districts_temp (id, code, name, category, last_training_date, next_due_date)
+                SELECT id, code, name, category, last_training_date, next_due_date FROM districts
+            ''')
+            c.execute("DROP TABLE districts")
+            c.execute("ALTER TABLE districts_temp RENAME TO districts")
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+ensure_safe_districts_table()
 
 # Daftar Kategori Lengkap Distrik
 CATEGORY_OPTIONS = [
@@ -639,7 +669,6 @@ elif menu == "Dashboard Instruktur & Records":
 elif menu == "Master Distrik & Jadwal Recurrent":
     st.title("📍 Master Distrik & Monitoring Recurrent (24 Bulan)")
 
-    # 1. Ambil data distrik langsung dari DB
     dist_df = get_districts()
 
     def calculate_status(due_str):
@@ -660,12 +689,11 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['Status Recurrent'] = dist_df['next_due_date'].apply(calculate_status)
     dist_df['Hapus'] = False
 
-    # Format tipe data tanggal
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
     # -------------------------------------------------------------
-    # FITUR 1: EDIT MANUAL CODE, NAME, & CATEGORY (ANTI-RESET / AMAN INTEGRITY)
+    # FITUR 1: EDIT MANUAL CODE, NAME, & CATEGORY (MANDIRI & ANTI-GAGAL)
     # -------------------------------------------------------------
     with st.expander("✏️ **Klik di sini untuk Edit Manual Data Distrik (Code, Name, Category)**", expanded=True):
         if not dist_df.empty:
@@ -704,8 +732,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                         st.rerun()
                     except sqlite3.IntegrityError:
                         conn.close()
-                        # Tangani jika tabel lama masih mengunci batasan UNIQUE
-                        fix_districts_table_schema()
+                        ensure_safe_districts_table()
                         conn2 = sqlite3.connect('dg_training.db')
                         c2 = conn2.cursor()
                         c2.execute("""
@@ -752,7 +779,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                 new_last = str(r['last_training_date'])[:10] if pd.notnull(r['last_training_date']) and str(r['last_training_date']) not in ['None', 'NaT'] else None
                 new_due = str(r['next_due_date'])[:10] if pd.notnull(r['next_due_date']) and str(r['next_due_date']) not in ['None', 'NaT'] else None
 
-                # Otomatis isi reminder 24 bulan jika Last Training diisi tapi Due Date kosong
                 if new_last and not new_due:
                     try:
                         dt_calc = datetime.strptime(new_last, "%Y-%m-%d").date()
