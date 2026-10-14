@@ -638,6 +638,7 @@ elif menu == "Dashboard Instruktur & Records":
 elif menu == "Master Distrik & Jadwal Recurrent":
     st.title("📍 Master Distrik & Monitoring Recurrent (24 Bulan)")
 
+    # 1. Ambil data distrik langsung dari DB
     dist_df = get_districts()
 
     today = date.today()
@@ -662,17 +663,17 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['Status Recurrent'] = statuses
     dist_df['Hapus'] = False
 
-    # Konversi kolom tanggal agar terbaca rapi oleh editor Streamlit
+    # Format tipe data tanggal
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
-    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom **Code**, **Name**, **Category**, **Last Training Date**, atau **Next Due Date** untuk mengedit data, lalu klik tombol **Simpan Seluruh Perubahan Data**. Centang **Hapus** untuk menghapus distrik.")
+    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom yang ingin diedit, lalu klik **Simpan Perubahan Data**. Data tanggal akan terkunci aman di database.")
 
-    # Kolom id ikut dimasukkan agar menjadi acuan unik, namun disembunyikan / disabled di layar
+    # 2. Render Data Editor
     edited_dist = st.data_editor(
         dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent', 'Hapus']],
         column_config={
-            "id": st.column_config.NumberColumn("ID", disabled=True, required=True),
+            "id": st.column_config.NumberColumn("ID", disabled=True),
             "code": st.column_config.TextColumn("Code", required=True),
             "name": st.column_config.TextColumn("Name", required=True),
             "category": st.column_config.SelectboxColumn("Category", options=CATEGORY_OPTIONS, required=True),
@@ -684,56 +685,68 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         disabled=['id', 'Status Recurrent'],
         hide_index=True,
         use_container_width=True,
-        key="editor_master_distrik"
+        key="master_distrik_editor"
     )
 
     btn_c1, btn_c2 = st.columns(2)
 
     with btn_c1:
-        if st.button("💾 Simpan Seluruh Perubahan Data", type="primary"):
-            conn = sqlite3.connect('dg_training.db')
-            c = conn.cursor()
-            
-            # Loop pembaruan akurat berdasarkan ID unik database
-            for _, r in edited_dist.iterrows():
-                rec_id = r['id']
-                new_code = str(r['code']).strip().upper()
-                new_name = str(r['name']).strip()
-                new_cat = str(r['category']).strip()
+        if st.button("💾 Simpan Perubahan Data", type="primary"):
+            # Dapatkan kamus sel-sel yang benar-benar diubah user
+            editor_state = st.session_state.get("master_distrik_editor", {})
+            edited_rows = editor_state.get("edited_rows", {})
+
+            if not edited_rows:
+                st.info("Tidak ada perubahan baru yang terdeteksi.")
+            else:
+                conn = sqlite3.connect('dg_training.db')
+                c = conn.cursor()
                 
-                new_last = str(r['last_training_date']) if pd.notnull(r['last_training_date']) else None
-                new_due = str(r['next_due_date']) if pd.notnull(r['next_due_date']) else None
+                # Iterasi hanya pada baris yang dimodifikasi oleh user
+                for row_idx, changes in edited_rows.items():
+                    target_row = dist_df.iloc[row_idx]
+                    target_id = target_row['id']
+                    
+                    # Nilai baru jika diedit, atau tetap nilai lama jika tidak diubah
+                    code_val = changes.get('code', target_row['code'])
+                    name_val = changes.get('name', target_row['name'])
+                    cat_val = changes.get('category', target_row['category'])
+                    
+                    last_val = changes.get('last_training_date', target_row['last_training_date'])
+                    due_val = changes.get('next_due_date', target_row['next_due_date'])
 
-                # Hitung otomatis 24 bulan jika Last Training diisi tapi Next Due kosong
-                if new_last and (not new_due or new_due == 'None'):
-                    try:
-                        dt = datetime.strptime(str(new_last)[:10], "%Y-%m-%d").date()
-                        new_due = dt.replace(year=dt.year + 2).strftime("%Y-%m-%d")
-                    except Exception:
-                        pass
+                    # Format tanggal ke string bersih
+                    str_last = str(last_val)[:10] if pd.notnull(last_val) and str(last_val) != 'None' else None
+                    str_due = str(due_val)[:10] if pd.notnull(due_val) and str(due_val) != 'None' else None
 
-                clean_last = str(new_last)[:10] if new_last and new_last != 'None' else None
-                clean_due = str(new_due)[:10] if new_due and new_due != 'None' else None
+                    # Otomatis isi due date +24 bulan jika diisi tanggal training tapi due date kosong
+                    if str_last and not str_due:
+                        try:
+                            dt_calc = datetime.strptime(str_last, "%Y-%m-%d").date()
+                            str_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
+                        except Exception:
+                            pass
 
-                c.execute("""
-                    UPDATE districts 
-                    SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ? 
-                    WHERE id = ?
-                """, (new_code, new_name, new_cat, clean_last, clean_due, rec_id))
+                    c.execute("""
+                        UPDATE districts 
+                        SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ? 
+                        WHERE id = ?
+                    """, (str(code_val).strip().upper(), str(name_val).strip(), str(cat_val).strip(), str_last, str_due, target_id))
 
-            conn.commit()
-            conn.close()
-            st.success("✅ Seluruh perubahan data (Kode, Nama, Kategori, & Tanggal) berhasil disimpan!")
-            st.rerun()
+                conn.commit()
+                conn.close()
+                st.toast("✅ Perubahan berhasil disimpan permanen!", icon="💾")
+                st.rerun()
 
     with btn_c2:
+        # Penanganan hapus distrik yang dicentang
         to_del_dist = edited_dist[edited_dist['Hapus'] == True]
         if not to_del_dist.empty:
             if st.button(f"🗑️ Hapus {len(to_del_dist)} Distrik Terpilih"):
                 conn = sqlite3.connect('dg_training.db')
                 c = conn.cursor()
-                for dist_id in to_del_dist['id']:
-                    c.execute("DELETE FROM districts WHERE id = ?", (dist_id,))
+                for d_id in to_del_dist['id']:
+                    c.execute("DELETE FROM districts WHERE id = ?", (d_id,))
                 conn.commit()
                 conn.close()
                 st.toast(f"{len(to_del_dist)} distrik berhasil dihapus!", icon="✅")
