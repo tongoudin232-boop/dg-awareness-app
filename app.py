@@ -28,6 +28,16 @@ st.set_page_config(
 # Inisialisasi Database
 init_db()
 
+# Daftar Kategori Lengkap Distrik
+CATEGORY_OPTIONS = [
+    "Sriwijaya Air",
+    "NAM Air",
+    "Regulated Agent",
+    "Mitra Cargo",
+    "Warehouse",
+    "Jaster"
+]
+
 # ==================== 1. VERIFIKASI SERTIFIKAT VIA QR CODE ====================
 query_params = st.query_params
 
@@ -652,23 +662,26 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['Status Recurrent'] = statuses
     dist_df['Hapus'] = False
 
+    # Konversi kolom tanggal agar terbaca rapi oleh editor Streamlit
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
-    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk mengedit tanggal, lalu klik tombol **Simpan Perubahan Jadwal**. Centang **Hapus** untuk menghapus distrik.")
+    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom **Code**, **Name**, **Category**, **Last Training Date**, atau **Next Due Date** untuk mengedit data, lalu klik tombol **Simpan Seluruh Perubahan Data**. Centang **Hapus** untuk menghapus distrik.")
 
+    # Kolom id ikut dimasukkan agar menjadi acuan unik, namun disembunyikan / disabled di layar
     edited_dist = st.data_editor(
-        dist_df[['code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent', 'Hapus']],
+        dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent', 'Hapus']],
         column_config={
-            "code": st.column_config.TextColumn("Code", disabled=True),
-            "name": st.column_config.TextColumn("Name", disabled=True),
-            "category": st.column_config.TextColumn("Category", disabled=True),
+            "id": st.column_config.NumberColumn("ID", disabled=True, required=True),
+            "code": st.column_config.TextColumn("Code", required=True),
+            "name": st.column_config.TextColumn("Name", required=True),
+            "category": st.column_config.SelectboxColumn("Category", options=CATEGORY_OPTIONS, required=True),
             "last_training_date": st.column_config.DateColumn("Last Training Date", format="YYYY-MM-DD"),
             "next_due_date": st.column_config.DateColumn("Next Due Date (Reminder)", format="YYYY-MM-DD"),
             "Status Recurrent": st.column_config.TextColumn("Status Recurrent", disabled=True),
             "Hapus": st.column_config.CheckboxColumn("Hapus", default=False)
         },
-        disabled=['code', 'name', 'category', 'Status Recurrent'],
+        disabled=['id', 'Status Recurrent'],
         hide_index=True,
         use_container_width=True,
         key="editor_master_distrik"
@@ -677,15 +690,21 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     btn_c1, btn_c2 = st.columns(2)
 
     with btn_c1:
-        if st.button("💾 Simpan Perubahan Jadwal (Last Training & Next Due)", type="primary"):
+        if st.button("💾 Simpan Seluruh Perubahan Data", type="primary"):
             conn = sqlite3.connect('dg_training.db')
             c = conn.cursor()
             
+            # Loop pembaruan akurat berdasarkan ID unik database
             for _, r in edited_dist.iterrows():
-                dist_code = r['code']
+                rec_id = r['id']
+                new_code = str(r['code']).strip().upper()
+                new_name = str(r['name']).strip()
+                new_cat = str(r['category']).strip()
+                
                 new_last = str(r['last_training_date']) if pd.notnull(r['last_training_date']) else None
                 new_due = str(r['next_due_date']) if pd.notnull(r['next_due_date']) else None
 
+                # Hitung otomatis 24 bulan jika Last Training diisi tapi Next Due kosong
                 if new_last and (not new_due or new_due == 'None'):
                     try:
                         dt = datetime.strptime(str(new_last)[:10], "%Y-%m-%d").date()
@@ -698,13 +717,13 @@ elif menu == "Master Distrik & Jadwal Recurrent":
 
                 c.execute("""
                     UPDATE districts 
-                    SET last_training_date = ?, next_due_date = ? 
-                    WHERE code = ?
-                """, (clean_last, clean_due, dist_code))
+                    SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ? 
+                    WHERE id = ?
+                """, (new_code, new_name, new_cat, clean_last, clean_due, rec_id))
 
             conn.commit()
             conn.close()
-            st.success("✅ Seluruh perubahan tanggal berhasil disimpan ke database!")
+            st.success("✅ Seluruh perubahan data (Kode, Nama, Kategori, & Tanggal) berhasil disimpan!")
             st.rerun()
 
     with btn_c2:
@@ -713,8 +732,8 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             if st.button(f"🗑️ Hapus {len(to_del_dist)} Distrik Terpilih"):
                 conn = sqlite3.connect('dg_training.db')
                 c = conn.cursor()
-                for c_code in to_del_dist['code']:
-                    c.execute("DELETE FROM districts WHERE code = ?", (c_code,))
+                for dist_id in to_del_dist['id']:
+                    c.execute("DELETE FROM districts WHERE id = ?", (dist_id,))
                 conn.commit()
                 conn.close()
                 st.toast(f"{len(to_del_dist)} distrik berhasil dihapus!", icon="✅")
@@ -729,7 +748,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         with c2:
             new_name = st.text_input("Nama Kota / Bandara (misal: Banjarmasin)")
         with c3:
-            new_cat = st.selectbox("Kategori", ["Sriwijaya Air", "NAM Air", "Regulated Agent", "Mitra Cargo"])
+            new_cat = st.selectbox("Kategori", CATEGORY_OPTIONS)
         
         btn_add = st.form_submit_button("Simpan Distrik Baru")
         if btn_add:
