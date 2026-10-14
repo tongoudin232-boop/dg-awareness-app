@@ -9,7 +9,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # 1. Tabel Master Distrik (tanpa batasan UNIQUE pada code agar kode kembar diizinkan)
+    # 1. Tabel Master Distrik (tanpa batasan UNIQUE pada code)
     c.execute('''
         CREATE TABLE IF NOT EXISTS districts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +25,7 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM districts")
     count = c.fetchone()[0]
 
-    # Hanya isi data awal jika database benar-benar kosong pertama kali
+    # Hanya isi data awal jika database benar-benar baru dibuat (masih kosong)
     if count == 0:
         default_districts = [
             ('CGK', 'Cengkareng', 'Sriwijaya Air'),

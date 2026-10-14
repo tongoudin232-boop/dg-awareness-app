@@ -30,7 +30,7 @@ st.set_page_config(
 # Inisialisasi Database
 init_db()
 
-# Melepas constraint UNIQUE lama pada tabel districts jika ada di file db eksisting
+# Melepas constraint UNIQUE lama pada tabel districts jika ada di file db fisik eksisting
 def ensure_safe_districts_table():
     try:
         conn = sqlite3.connect('dg_training.db')
@@ -386,9 +386,7 @@ if menu == "Ujian DG Awareness":
 elif menu == "Dashboard Instruktur & Records":
     st.title("📊 Training Records & Audit Report")
 
-    # -------------------------------------------------------------
-    # PANEL RESET NOMOR SERTIFIKAT & PEMBERSIHAN DATA TRIAL
-    # -------------------------------------------------------------
+    # Panel Reset Nomor Urut Sertifikat & Bersihkan Record Trial
     with st.expander("⚙️ **Pengaturan Khusus & Reset Data Percobaan (Trial)**", expanded=False):
         c_tool1, c_tool2 = st.columns(2)
         with c_tool1:
@@ -414,7 +412,7 @@ elif menu == "Dashboard Instruktur & Records":
     if records_df.empty:
         st.info("Belum ada data riwayat training. (Tabel bersih)")
     else:
-        # Pilihan Hapus Spesifik Berdasarkan ID Peserta
+        # Hapus Record Spesifik Berdasarkan ID / Nama
         with st.expander("🗑️ **Hapus Record Spesifik (Berdasarkan ID / Nama)**", expanded=False):
             rec_options = {
                 f"ID {r['id']} | {r['full_name']} ({r['district']}) - Tgl: {r['training_date']}": r['id']
@@ -445,7 +443,6 @@ elif menu == "Dashboard Instruktur & Records":
 
         st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
-        # Ekspor Excel & CSV Seluruh Record
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             filtered_df.to_excel(writer, index=False, sheet_name='Training_Records')
@@ -476,7 +473,6 @@ elif menu == "Dashboard Instruktur & Records":
         st.subheader("📝 Penerbitan Daftar Kehadiran (Absensi) Training")
         st.caption("Gunakan bagian ini untuk menerbitkan absensi resmi per distrik dan per tanggal kegiatan.")
 
-        # Step 1: Filter Distrik & Tanggal Kegiatan
         col_ab1, col_ab2 = st.columns(2)
         with col_ab1:
             all_districts = sorted(records_df['district'].dropna().unique().tolist())
@@ -495,7 +491,6 @@ elif menu == "Dashboard Instruktur & Records":
             total_peserta = len(candidates_att)
             st.info(f"Ditemukan **{total_peserta} orang peserta** untuk Distrik **{selected_absensi_dist}** pada tanggal **{selected_absensi_date}**.")
 
-            # Step 2: Konfigurasi Pelaksanaan & Upload Bukti Foto
             c_meta1, c_meta2, c_meta3 = st.columns(3)
             with c_meta1:
                 mode_training = st.radio("Metode Pelaksanaan:", ["Online", "Offline"], horizontal=True)
@@ -531,7 +526,6 @@ elif menu == "Dashboard Instruktur & Records":
 
             foto_bytes = foto_uploaded.getvalue() if foto_uploaded is not None else None
 
-            # Step 3: Tombol Ekspor PDF & XLSX
             for s_idx, session_df in enumerate(sessions):
                 sesi_label = f"Sesi {s_idx + 1}" if num_sessions > 1 else "Dokumen Absensi"
                 st.markdown(f"#### 📄 Unduh {sesi_label} ({len(session_df)} Peserta)")
@@ -697,20 +691,17 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['Status Recurrent'] = dist_df['next_due_date'].apply(calculate_status)
     dist_df['Hapus'] = False
 
-    dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
-    dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
-
     # -------------------------------------------------------------
-    # FITUR 1: EDIT MANUAL CODE, NAME, & CATEGORY (MANDIRI & ANTI-GAGAL)
+    # FITUR 1: EDIT LENGKAP DISTRIK (CODE, NAME, CATEGORY, TANGGAL)
     # -------------------------------------------------------------
-    with st.expander("✏️ **Klik di sini untuk Edit Manual Data Distrik (Code, Name, Category)**", expanded=True):
+    with st.expander("✏️ **Pusat Edit Manual Data Distrik & Jadwal Recurrent**", expanded=True):
         if not dist_df.empty:
             dist_map = {}
             for _, d_row in dist_df.iterrows():
                 lbl = f"ID {d_row['id']} | {d_row['code']} - {d_row['name']} ({d_row['category']})"
                 dist_map[lbl] = d_row
 
-            sel_dist_lbl = st.selectbox("Pilih Data Distrik yang Ingin Diubah:", list(dist_map.keys()))
+            sel_dist_lbl = st.selectbox("Pilih Distrik yang Ingin Diubah:", list(dist_map.keys()))
             cur_data = dist_map[sel_dist_lbl]
 
             with st.form("form_edit_manual_distrik"):
@@ -723,20 +714,46 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     cat_idx = CATEGORY_OPTIONS.index(cur_data['category']) if cur_data['category'] in CATEGORY_OPTIONS else 0
                     edit_cat = st.selectbox("Kategori", CATEGORY_OPTIONS, index=cat_idx)
 
-                btn_save_manual = st.form_submit_button("💾 Simpan Perubahan Data Ini", type="primary")
+                e_c4, e_c5 = st.columns(2)
+                with e_c4:
+                    raw_last = str(cur_data['last_training_date'])
+                    val_last = raw_last[:10] if raw_last not in ['None', '', 'nan', 'NaT'] else ""
+                    edit_last = st.text_input("Last Training Date (Format: YYYY-MM-DD)", value=val_last)
+                with e_c5:
+                    raw_due = str(cur_data['next_due_date'])
+                    val_due = raw_due[:10] if raw_due not in ['None', '', 'nan', 'NaT'] else ""
+                    edit_due = st.text_input("Next Due Date (Format: YYYY-MM-DD)", value=val_due)
+
+                b_col1, b_col2 = st.columns([1, 1])
+                with b_col1:
+                    btn_save_manual = st.form_submit_button("💾 Simpan Seluruh Perubahan Baris Ini", type="primary")
+                with b_col2:
+                    btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                 if btn_save_manual:
                     conn = sqlite3.connect('dg_training.db')
                     c = conn.cursor()
+
+                    final_last = edit_last.strip() if edit_last.strip() else None
+                    final_due = edit_due.strip() if edit_due.strip() else None
+
+                    # Otomatis isi reminder 2 tahun jika Last Training diisi tapi Due Date kosong
+                    if final_last and not final_due:
+                        try:
+                            dt_calc = datetime.strptime(final_last, "%Y-%m-%d").date()
+                            final_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
+                        except Exception:
+                            pass
+
                     try:
                         c.execute("""
                             UPDATE districts 
-                            SET code = ?, name = ?, category = ? 
+                            SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ?
                             WHERE id = ?
-                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), int(cur_data['id'])))
+                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), final_last, final_due, int(cur_data['id'])))
                         conn.commit()
                         conn.close()
-                        st.success(f"✅ Data {edit_code.strip().upper()} berhasil diperbarui secara permanen!")
+                        st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui permanen!")
                         st.rerun()
                     except sqlite3.IntegrityError:
                         conn.close()
@@ -745,81 +762,44 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                         c2 = conn2.cursor()
                         c2.execute("""
                             UPDATE districts 
-                            SET code = ?, name = ?, category = ? 
+                            SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ?
                             WHERE id = ?
-                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), int(cur_data['id'])))
+                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), final_last, final_due, int(cur_data['id'])))
                         conn2.commit()
                         conn2.close()
-                        st.success(f"✅ Database disesuaikan & Data {edit_code.strip().upper()} berhasil disimpan!")
+                        st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui!")
                         st.rerun()
 
-    st.markdown("---")
-    st.caption("💡 **Petunjuk Tabel:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk ubah tanggal recurrent, lalu klik tombol **Simpan Tanggal Recurrent** di bawah.")
+                if btn_del_single:
+                    conn = sqlite3.connect('dg_training.db')
+                    c = conn.cursor()
+                    c.execute("DELETE FROM districts WHERE id = ?", (int(cur_data['id']),))
+                    conn.commit()
+                    conn.close()
+                    st.toast(f"Distrik {cur_data['code']} berhasil dihapus permanen!", icon="🗑️")
+                    st.rerun()
 
-    # 2. Render Data Editor untuk Tanggal & Hapus Distrik
-    edited_dist = st.data_editor(
-        dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent', 'Hapus']],
+    st.markdown("---")
+    st.subheader("📋 Tabel Monitoring Distrik & Recurrent")
+
+    # Render Tabel Monitoring
+    st.dataframe(
+        dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent']],
         column_config={
-            "id": st.column_config.NumberColumn("ID", disabled=True),
-            "code": st.column_config.TextColumn("Code", disabled=True),
-            "name": st.column_config.TextColumn("Name", disabled=True),
-            "category": st.column_config.TextColumn("Category", disabled=True),
-            "last_training_date": st.column_config.DateColumn("Last Training Date", format="YYYY-MM-DD"),
-            "next_due_date": st.column_config.DateColumn("Next Due Date (Reminder)", format="YYYY-MM-DD"),
-            "Status Recurrent": st.column_config.TextColumn("Status Recurrent", disabled=True),
-            "Hapus": st.column_config.CheckboxColumn("Hapus", default=False)
+            "id": st.column_config.NumberColumn("ID"),
+            "code": st.column_config.TextColumn("Code"),
+            "name": st.column_config.TextColumn("Name"),
+            "category": st.column_config.TextColumn("Category"),
+            "last_training_date": st.column_config.TextColumn("Last Training Date"),
+            "next_due_date": st.column_config.TextColumn("Next Due Date (Reminder)"),
+            "Status Recurrent": st.column_config.TextColumn("Status Recurrent")
         },
-        disabled=['id', 'code', 'name', 'category', 'Status Recurrent'],
         hide_index=True,
-        use_container_width=True,
-        key="editor_master_distrik"
+        use_container_width=True
     )
 
-    btn_c1, btn_c2 = st.columns(2)
-
-    with btn_c1:
-        if st.button("💾 Simpan Tanggal Recurrent (Last Training & Due Date)", type="primary"):
-            conn = sqlite3.connect('dg_training.db')
-            c = conn.cursor()
-            
-            for _, r in edited_dist.iterrows():
-                target_id = int(r['id'])
-                new_last = str(r['last_training_date'])[:10] if pd.notnull(r['last_training_date']) and str(r['last_training_date']) not in ['None', 'NaT'] else None
-                new_due = str(r['next_due_date'])[:10] if pd.notnull(r['next_due_date']) and str(r['next_due_date']) not in ['None', 'NaT'] else None
-
-                if new_last and not new_due:
-                    try:
-                        dt_calc = datetime.strptime(new_last, "%Y-%m-%d").date()
-                        new_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
-                    except Exception:
-                        pass
-
-                c.execute("""
-                    UPDATE districts 
-                    SET last_training_date = ?, next_due_date = ? 
-                    WHERE id = ?
-                """, (new_last, new_due, target_id))
-
-            conn.commit()
-            conn.close()
-            st.success("✅ Seluruh pembaruan tanggal recurrent berhasil disimpan!")
-            st.rerun()
-
-    with btn_c2:
-        to_del_dist = edited_dist[edited_dist['Hapus'] == True]
-        if not to_del_dist.empty:
-            if st.button(f"🗑️ Hapus {len(to_del_dist)} Distrik Terpilih"):
-                conn = sqlite3.connect('dg_training.db')
-                c = conn.cursor()
-                for d_id in to_del_dist['id']:
-                    c.execute("DELETE FROM districts WHERE id = ?", (int(d_id),))
-                conn.commit()
-                conn.close()
-                st.toast(f"{len(to_del_dist)} distrik berhasil dihapus!", icon="✅")
-                st.rerun()
-
     st.markdown("---")
-    st.subheader("Tambah Rute / Distrik Baru")
+    st.subheader("➕ Tambah Rute / Distrik Baru")
     with st.form("add_dist_form"):
         c1, c2, c3 = st.columns(3)
         with c1:
