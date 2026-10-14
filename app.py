@@ -663,22 +663,61 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
-    st.caption("💡 **Penting:** Setelah mengedit sel (Code, Name, Category, Tanggal), **tekan ENTER atau klik di luar sel** agar garis merah hilang, lalu klik tombol **Simpan Seluruh Perubahan Data**.")
+    # -------------------------------------------------------------
+    # FITUR 1: EDIT MANUAL CODE, NAME, & CATEGORY (ANTI-RESET / PASTI TERSIMPAN)
+    # -------------------------------------------------------------
+    with st.expander("✏️ **Klik di sini untuk Edit Manual Data Distrik (Code, Name, Category)**", expanded=True):
+        if not dist_df.empty:
+            dist_map = {}
+            for _, d_row in dist_df.iterrows():
+                lbl = f"ID {d_row['id']} | {d_row['code']} - {d_row['name']} ({d_row['category']})"
+                dist_map[lbl] = d_row
 
-    # 2. Render Data Editor
+            sel_dist_lbl = st.selectbox("Pilih Data Distrik yang Ingin Diubah:", list(dist_map.keys()))
+            cur_data = dist_map[sel_dist_lbl]
+
+            with st.form("form_edit_manual_distrik"):
+                e_c1, e_c2, e_c3 = st.columns(3)
+                with e_c1:
+                    edit_code = st.text_input("Kode Distrik (Code)", value=str(cur_data['code']))
+                with e_c2:
+                    edit_name = st.text_input("Nama Distrik / Stasiun", value=str(cur_data['name']))
+                with e_c3:
+                    cat_idx = CATEGORY_OPTIONS.index(cur_data['category']) if cur_data['category'] in CATEGORY_OPTIONS else 0
+                    edit_cat = st.selectbox("Kategori", CATEGORY_OPTIONS, index=cat_idx)
+
+                btn_save_manual = st.form_submit_button("💾 Simpan Perubahan Data Ini", type="primary")
+
+                if btn_save_manual:
+                    conn = sqlite3.connect('dg_training.db')
+                    c = conn.cursor()
+                    c.execute("""
+                        UPDATE districts 
+                        SET code = ?, name = ?, category = ? 
+                        WHERE id = ?
+                    """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), int(cur_data['id'])))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ Data {edit_code.strip().upper()} berhasil diperbarui secara permanen!")
+                    st.rerun()
+
+    st.markdown("---")
+    st.caption("💡 **Petunjuk Tabel:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk ubah jadwal recurrent, lalu klik tombol **Simpan Tanggal Recurrent** di bawah.")
+
+    # 2. Render Data Editor untuk Tanggal & Hapus Distrik
     edited_dist = st.data_editor(
         dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent', 'Hapus']],
         column_config={
             "id": st.column_config.NumberColumn("ID", disabled=True),
-            "code": st.column_config.TextColumn("Code", required=True),
-            "name": st.column_config.TextColumn("Name", required=True),
-            "category": st.column_config.SelectboxColumn("Category", options=CATEGORY_OPTIONS, required=True),
+            "code": st.column_config.TextColumn("Code", disabled=True),
+            "name": st.column_config.TextColumn("Name", disabled=True),
+            "category": st.column_config.TextColumn("Category", disabled=True),
             "last_training_date": st.column_config.DateColumn("Last Training Date", format="YYYY-MM-DD"),
             "next_due_date": st.column_config.DateColumn("Next Due Date (Reminder)", format="YYYY-MM-DD"),
             "Status Recurrent": st.column_config.TextColumn("Status Recurrent", disabled=True),
             "Hapus": st.column_config.CheckboxColumn("Hapus", default=False)
         },
-        disabled=['id', 'Status Recurrent'],
+        disabled=['id', 'code', 'name', 'category', 'Status Recurrent'],
         hide_index=True,
         use_container_width=True,
         key="editor_master_distrik"
@@ -687,53 +726,33 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     btn_c1, btn_c2 = st.columns(2)
 
     with btn_c1:
-        if st.button("💾 Simpan Seluruh Perubahan Data", type="primary"):
-            state_data = st.session_state.get("editor_master_distrik", {})
-            edited_rows = state_data.get("edited_rows", {})
+        if st.button("💾 Simpan Tanggal Recurrent (Last Training & Due Date)", type="primary"):
+            conn = sqlite3.connect('dg_training.db')
+            c = conn.cursor()
+            
+            for _, r in edited_dist.iterrows():
+                target_id = int(r['id'])
+                new_last = str(r['last_training_date'])[:10] if pd.notnull(r['last_training_date']) and str(r['last_training_date']) not in ['None', 'NaT'] else None
+                new_due = str(r['next_due_date'])[:10] if pd.notnull(r['next_due_date']) and str(r['next_due_date']) not in ['None', 'NaT'] else None
 
-            if not edited_rows:
-                st.warning("⚠️ Tidak ada perubahan yang terdeteksi. Pastikan Anda sudah menekan ENTER setelah mengetik di sel (sampai garis merah hilang).")
-            else:
-                conn = sqlite3.connect('dg_training.db')
-                c = conn.cursor()
-                updated_count = 0
+                # Hitung otomatis reminder 24 bulan jika Last Training diisi tapi Due Date kosong
+                if new_last and not new_due:
+                    try:
+                        dt_calc = datetime.strptime(new_last, "%Y-%m-%d").date()
+                        new_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
+                    except Exception:
+                        pass
 
-                for row_idx, changes in edited_rows.items():
-                    row_idx = int(row_idx)
-                    target_row = dist_df.iloc[row_idx]
-                    target_id = int(target_row['id'])
+                c.execute("""
+                    UPDATE districts 
+                    SET last_training_date = ?, next_due_date = ? 
+                    WHERE id = ?
+                """, (new_last, new_due, target_id))
 
-                    new_code = str(changes.get('code', target_row['code'])).strip().upper()
-                    new_name = str(changes.get('name', target_row['name'])).strip()
-                    new_cat = str(changes.get('category', target_row['category'])).strip()
-
-                    new_last = changes.get('last_training_date', target_row['last_training_date'])
-                    new_due = changes.get('next_due_date', target_row['next_due_date'])
-
-                    str_last = str(new_last)[:10] if pd.notnull(new_last) and str(new_last) not in ['None', 'NaT'] else None
-                    str_due = str(new_due)[:10] if pd.notnull(new_due) and str(new_due) not in ['None', 'NaT'] else None
-
-                    # Otomatis isi reminder 24 bulan jika Last Training diisi tapi Due Date kosong
-                    if str_last and not str_due:
-                        try:
-                            dt_calc = datetime.strptime(str_last, "%Y-%m-%d").date()
-                            str_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
-                        except Exception:
-                            pass
-
-                    c.execute("""
-                        UPDATE districts 
-                        SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ? 
-                        WHERE id = ?
-                    """, (new_code, new_name, new_cat, str_last, str_due, target_id))
-                    updated_count += 1
-
-                conn.commit()
-                conn.close()
-
-                if updated_count > 0:
-                    st.success(f"✅ Berhasil menyimpan permanen {updated_count} baris data!")
-                    st.rerun()
+            conn.commit()
+            conn.close()
+            st.success("✅ Seluruh pembaruan tanggal recurrent berhasil disimpan!")
+            st.rerun()
 
     with btn_c2:
         to_del_dist = edited_dist[edited_dist['Hapus'] == True]
