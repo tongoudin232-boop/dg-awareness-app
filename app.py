@@ -641,33 +641,29 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     # 1. Ambil data distrik langsung dari DB
     dist_df = get_districts()
 
-    today = date.today()
-    statuses = []
-    for _, row in dist_df.iterrows():
-        due_str = row['next_due_date']
-        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '']:
-            statuses.append("Belum Ada Riwayat Training")
-        else:
-            try:
-                due_dt = datetime.strptime(str(due_str)[:10], "%Y-%m-%d").date()
-                diff_days = (due_dt - today).days
-                if diff_days < 0:
-                    statuses.append("⚠️ Kedaluwarsa (Wajib Recurrent)")
-                elif diff_days <= 30:
-                    statuses.append(f"🔔 Segera Recurrent ({diff_days} Hari Tersisa)")
-                else:
-                    statuses.append("✅ Aktif")
-            except Exception:
-                statuses.append("Format Tanggal Salah")
+    def calculate_status(due_str):
+        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '', 'NaT']:
+            return "Belum Ada Riwayat Training"
+        try:
+            due_dt = datetime.strptime(str(due_str)[:10], "%Y-%m-%d").date()
+            diff_days = (due_dt - date.today()).days
+            if diff_days < 0:
+                return "⚠️ Kedaluwarsa (Wajib Recurrent)"
+            elif diff_days <= 30:
+                return f"🔔 Segera Recurrent ({diff_days} Hari Tersisa)"
+            else:
+                return "✅ Aktif"
+        except Exception:
+            return "Format Tanggal Salah"
 
-    dist_df['Status Recurrent'] = statuses
+    dist_df['Status Recurrent'] = dist_df['next_due_date'].apply(calculate_status)
     dist_df['Hapus'] = False
 
     # Format tipe data tanggal
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
-    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom yang ingin diedit (Code, Name, Category, atau Tanggal). Setelah mengetik, **tekan ENTER**, lalu klik tombol **Simpan Seluruh Perubahan Data**.")
+    st.caption("💡 **Penting:** Setelah mengedit sel (Code, Name, Category, Tanggal), **tekan ENTER atau klik di luar sel** agar garis merah hilang, lalu klik tombol **Simpan Seluruh Perubahan Data**.")
 
     # 2. Render Data Editor
     edited_dist = st.data_editor(
@@ -692,41 +688,36 @@ elif menu == "Master Distrik & Jadwal Recurrent":
 
     with btn_c1:
         if st.button("💾 Simpan Seluruh Perubahan Data", type="primary"):
-            conn = sqlite3.connect('dg_training.db')
-            c = conn.cursor()
-            
-            orig_dict = dist_df.set_index('id').to_dict('index')
-            updated_count = 0
+            state_data = st.session_state.get("editor_master_distrik", {})
+            edited_rows = state_data.get("edited_rows", {})
 
-            for _, r in edited_dist.iterrows():
-                target_id = r['id']
-                if target_id not in orig_dict:
-                    continue
-                
-                orig_row = orig_dict[target_id]
-                
-                new_code = str(r['code']).strip().upper()
-                new_name = str(r['name']).strip()
-                new_cat = str(r['category']).strip()
-                
-                new_last = str(r['last_training_date'])[:10] if pd.notnull(r['last_training_date']) and str(r['last_training_date']) != 'None' else None
-                new_due = str(r['next_due_date'])[:10] if pd.notnull(r['next_due_date']) and str(r['next_due_date']) != 'None' else None
+            if not edited_rows:
+                st.warning("⚠️ Tidak ada perubahan yang terdeteksi. Pastikan Anda sudah menekan ENTER setelah mengetik di sel (sampai garis merah hilang).")
+            else:
+                conn = sqlite3.connect('dg_training.db')
+                c = conn.cursor()
+                updated_count = 0
 
-                orig_last = str(orig_row['last_training_date'])[:10] if pd.notnull(orig_row['last_training_date']) and str(orig_row['last_training_date']) != 'None' else None
-                orig_due = str(orig_row['next_due_date'])[:10] if pd.notnull(orig_row['next_due_date']) and str(orig_row['next_due_date']) != 'None' else None
+                for row_idx, changes in edited_rows.items():
+                    row_idx = int(row_idx)
+                    target_row = dist_df.iloc[row_idx]
+                    target_id = int(target_row['id'])
 
-                # Cek jika terdapat perubahan data
-                if (new_code != str(orig_row['code']).strip().upper() or
-                    new_name != str(orig_row['name']).strip() or
-                    new_cat != str(orig_row['category']).strip() or
-                    new_last != orig_last or
-                    new_due != orig_due):
+                    new_code = str(changes.get('code', target_row['code'])).strip().upper()
+                    new_name = str(changes.get('name', target_row['name'])).strip()
+                    new_cat = str(changes.get('category', target_row['category'])).strip()
 
-                    # Otomatis isi reminder 24 bulan jika Last Training diisi tapi Next Due kosong
-                    if new_last and not new_due:
+                    new_last = changes.get('last_training_date', target_row['last_training_date'])
+                    new_due = changes.get('next_due_date', target_row['next_due_date'])
+
+                    str_last = str(new_last)[:10] if pd.notnull(new_last) and str(new_last) not in ['None', 'NaT'] else None
+                    str_due = str(new_due)[:10] if pd.notnull(new_due) and str(new_due) not in ['None', 'NaT'] else None
+
+                    # Otomatis isi reminder 24 bulan jika Last Training diisi tapi Due Date kosong
+                    if str_last and not str_due:
                         try:
-                            dt_calc = datetime.strptime(new_last, "%Y-%m-%d").date()
-                            new_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
+                            dt_calc = datetime.strptime(str_last, "%Y-%m-%d").date()
+                            str_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
                         except Exception:
                             pass
 
@@ -734,17 +725,15 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                         UPDATE districts 
                         SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ? 
                         WHERE id = ?
-                    """, (new_code, new_name, new_cat, new_last, new_due, target_id))
+                    """, (new_code, new_name, new_cat, str_last, str_due, target_id))
                     updated_count += 1
 
-            conn.commit()
-            conn.close()
+                conn.commit()
+                conn.close()
 
-            if updated_count > 0:
-                st.success(f"✅ Berhasil menyimpan {updated_count} baris data yang diubah!")
-                st.rerun()
-            else:
-                st.info("Tidak ada perubahan data yang terdeteksi. Pastikan tekan ENTER setelah mengedit sel.")
+                if updated_count > 0:
+                    st.success(f"✅ Berhasil menyimpan permanen {updated_count} baris data!")
+                    st.rerun()
 
     with btn_c2:
         to_del_dist = edited_dist[edited_dist['Hapus'] == True]
@@ -753,7 +742,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                 conn = sqlite3.connect('dg_training.db')
                 c = conn.cursor()
                 for d_id in to_del_dist['id']:
-                    c.execute("DELETE FROM districts WHERE id = ?", (d_id,))
+                    c.execute("DELETE FROM districts WHERE id = ?", (int(d_id),))
                 conn.commit()
                 conn.close()
                 st.toast(f"{len(to_del_dist)} distrik berhasil dihapus!", icon="✅")
