@@ -505,7 +505,8 @@ elif menu == "Dashboard Instruktur & Records":
                             data=pdf_sj_att,
                             file_name=f"Absensi_SJ_{selected_absensi_dist}_{selected_absensi_date}_{sesi_label.replace(' ', '_')}.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            use_container_width=True,
+                            key=f"att_sj_{s_idx}"
                         )
                     except Exception as e:
                         st.error(f"Gagal generate PDF SJ: {e}")
@@ -526,7 +527,8 @@ elif menu == "Dashboard Instruktur & Records":
                             data=pdf_in_att,
                             file_name=f"Absensi_IN_{selected_absensi_dist}_{selected_absensi_date}_{sesi_label.replace(' ', '_')}.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            use_container_width=True,
+                            key=f"att_in_{s_idx}"
                         )
                     except Exception as e:
                         st.error(f"Gagal generate PDF IN: {e}")
@@ -545,7 +547,8 @@ elif menu == "Dashboard Instruktur & Records":
                             data=excel_att,
                             file_name=f"Absensi_{selected_absensi_dist}_{selected_absensi_date}_{sesi_label.replace(' ', '_')}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
+                            use_container_width=True,
+                            key=f"att_xls_{s_idx}"
                         )
                     except Exception as e:
                         st.error(f"Gagal generate Excel: {e}")
@@ -595,7 +598,8 @@ elif menu == "Dashboard Instruktur & Records":
                         data=re_pdf_sj,
                         file_name=f"Sertifikat_SJ_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
                         mime="application/pdf",
-                        use_container_width=True
+                        use_container_width=True,
+                        key="btn_re_sj"
                     )
                 except Exception as e:
                     st.error(f"Gagal mencetak ulang sertifikat SJ: {e}")
@@ -613,7 +617,8 @@ elif menu == "Dashboard Instruktur & Records":
                         data=re_pdf_in,
                         file_name=f"Sertifikat_IN_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
                         mime="application/pdf",
-                        use_container_width=True
+                        use_container_width=True,
+                        key="btn_re_in"
                     )
                 except Exception as e:
                     st.error(f"Gagal mencetak ulang sertifikat IN: {e}")
@@ -629,7 +634,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     statuses = []
     for _, row in dist_df.iterrows():
         due_str = row['next_due_date']
-        if pd.isna(due_str) or not due_str:
+        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '']:
             statuses.append("Belum Ada Riwayat Training")
         else:
             try:
@@ -650,7 +655,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df['last_training_date'] = pd.to_datetime(dist_df['last_training_date'], errors='coerce').dt.date
     dist_df['next_due_date'] = pd.to_datetime(dist_df['next_due_date'], errors='coerce').dt.date
 
-    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk mengedit tanggal, lalu klik **Simpan Perubahan Jadwal**. Centang **Hapus** untuk menghapus distrik.")
+    st.caption("💡 **Petunjuk:** Klik dua kali pada kolom **Last Training Date** atau **Next Due Date** untuk mengedit tanggal, lalu klik tombol **Simpan Perubahan Jadwal**. Centang **Hapus** untuk menghapus distrik.")
 
     edited_dist = st.data_editor(
         dist_df[['code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent', 'Hapus']],
@@ -665,44 +670,47 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         },
         disabled=['code', 'name', 'category', 'Status Recurrent'],
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
+        key="editor_master_distrik"
     )
 
     btn_c1, btn_c2 = st.columns(2)
 
     with btn_c1:
-        if st.button("💾 Simpan Perubahan Jadwal (Last Training & Next Due)"):
+        if st.button("💾 Simpan Perubahan Jadwal (Last Training & Next Due)", type="primary"):
             conn = sqlite3.connect('dg_training.db')
             c = conn.cursor()
-            for idx, r in edited_dist.iterrows():
-                old_last = str(dist_df.loc[idx, 'last_training_date']) if pd.notnull(dist_df.loc[idx, 'last_training_date']) else ""
+            
+            for _, r in edited_dist.iterrows():
+                dist_code = r['code']
                 new_last = str(r['last_training_date']) if pd.notnull(r['last_training_date']) else None
-                
-                old_due = str(dist_df.loc[idx, 'next_due_date']) if pd.notnull(dist_df.loc[idx, 'next_due_date']) else ""
                 new_due = str(r['next_due_date']) if pd.notnull(r['next_due_date']) else None
 
-                if (str(new_last) != old_last) or (str(new_due) != old_due):
-                    if new_last and not new_due:
-                        try:
-                            dt = datetime.strptime(str(new_last)[:10], "%Y-%m-%d").date()
-                            new_due = dt.replace(year=dt.year + 2).strftime("%Y-%m-%d")
-                        except Exception:
-                            new_due = None
+                if new_last and (not new_due or new_due == 'None'):
+                    try:
+                        dt = datetime.strptime(str(new_last)[:10], "%Y-%m-%d").date()
+                        new_due = dt.replace(year=dt.year + 2).strftime("%Y-%m-%d")
+                    except Exception:
+                        pass
 
-                    c.execute("""
-                        UPDATE districts 
-                        SET last_training_date = ?, next_due_date = ? 
-                        WHERE code = ?
-                    """, (str(new_last)[:10] if new_last else None, str(new_due)[:10] if new_due else None, r['code']))
+                clean_last = str(new_last)[:10] if new_last and new_last != 'None' else None
+                clean_due = str(new_due)[:10] if new_due and new_due != 'None' else None
+
+                c.execute("""
+                    UPDATE districts 
+                    SET last_training_date = ?, next_due_date = ? 
+                    WHERE code = ?
+                """, (clean_last, clean_due, dist_code))
+
             conn.commit()
             conn.close()
-            st.success("Jadwal distrik berhasil diperbarui!")
+            st.success("✅ Seluruh perubahan tanggal berhasil disimpan ke database!")
             st.rerun()
 
     with btn_c2:
         to_del_dist = edited_dist[edited_dist['Hapus'] == True]
         if not to_del_dist.empty:
-            if st.button(f"🗑️ Hapus {len(to_del_dist)} Distrik Terpilih", type="primary"):
+            if st.button(f"🗑️ Hapus {len(to_del_dist)} Distrik Terpilih"):
                 conn = sqlite3.connect('dg_training.db')
                 c = conn.cursor()
                 for c_code in to_del_dist['code']:
