@@ -52,7 +52,6 @@ if "cert" in query_params:
     matched = pd.DataFrame()
     
     if not records_df.empty:
-        # Fungsi pembersih format nomor sertifikat (mencegah bug float/desimal dari Google Sheets)
         def clean_cert_val(val):
             if pd.isna(val) or val is None:
                 return ""
@@ -98,7 +97,7 @@ if "cert" in query_params:
         with col_v1:
             st.markdown(f"**Nama Peserta:** {rec['full_name']}")
             st.markdown(f"**NIK / Employee ID:** {rec['nik']}")
-            st.markdown(f"**Perusahaan / Mitra:** {rec['company']}")
+            st.markdown(f"**Perusahaan:** {rec['company']}")
             st.markdown(f"**Jabatan / Posisi:** {rec['job_role']}")
         with col_v2:
             st.markdown(f"**Distrik Pelaksanaan:** {rec['district']}")
@@ -174,7 +173,7 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            if instructor_pin == "admin123":
+            if instructor_pin == "Indomiesoto1":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
@@ -216,133 +215,9 @@ if menu == "Ujian DG Awareness":
         - Peserta yang lulus langsung memperoleh **2 Sertifikat Resmi** (Sriwijaya Air & NAM Air).
         """)
 
-    st.subheader("1. Data Diri Peserta")
-    col1, col2 = st.columns(2)
-    with col1:
-        full_name = st.text_input("Nama Lengkap*")
-        nik = st.text_input("NIK / Employee ID*")
-        phone = st.text_input("No. Handphone / WhatsApp*")
-        job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
-        
-        if job_role_selected == "Lainnya":
-            custom_role = st.text_input("Sebutkan Jabatan / Unit Kerja Anda*")
-            job_role = custom_role.strip()
-        else:
-            job_role = job_role_selected
-
-    with col2:
-        company = st.text_input("Perusahaan / Mitra Kerja* (misal: PT Sriwijaya Air / PT Gapura)")
-        dist_df = get_districts()
-        dist_options = dist_df['code'] + " - " + dist_df['name'] if not dist_df.empty else []
-        selected_dist = st.selectbox("Distrik Penugasan*", dist_options)
-        training_date = st.date_input("Tanggal Pelaksanaan Training", date.today())
-
-    st.subheader("2. Lembar Soal Ujian (25 Soal)")
-    
-    with st.form("exam_form"):
-        user_answers = {}
-        for i, q in enumerate(QUESTIONS):
-            st.markdown(f"**Soal {i+1}:** {q['question']}")
-            user_answers[i] = st.radio(
-                f"Pilih jawaban untuk nomor {i+1}:",
-                options=q['options'],
-                key=f"q_{i}",
-                index=None
-            )
-            st.write("")
-
-        submit_btn = st.form_submit_button("Submit Jawaban & Evaluasi Nilai", type="primary")
-
-    if submit_btn:
-        if not full_name or not nik or not phone or not company or not selected_dist or not job_role:
-            st.error("Mohon lengkapi seluruh kolom Data Diri Peserta (termasuk No. Handphone) sebelum submit!")
-        elif any(user_answers[i] is None for i in range(len(QUESTIONS))):
-            st.warning("Pastikan seluruh 25 soal telah dijawab!")
-        else:
-            correct_count = 0
-            for i, q in enumerate(QUESTIONS):
-                selected_val = user_answers[i]
-                raw_ans = q['answer']
-                if isinstance(raw_ans, int):
-                    correct_val = q['options'][raw_ans]
-                else:
-                    correct_val = str(raw_ans)
-                
-                if str(selected_val).strip().lower() == str(correct_val).strip().lower():
-                    correct_count += 1
-
-            score = correct_count * 4
-            dist_code = selected_dist.split(" - ")[0]
-            passed = score >= 80
-
-            if passed:
-                cert_no_sj = get_next_cert_number("SJ")
-                cert_no_in = get_next_cert_number("IN")
-                exp_date = (training_date + relativedelta(months=24)).strftime("%Y-%m-%d")
-
-                record_payload = {
-                    'training_date': str(training_date),
-                    'full_name': full_name,
-                    'nik': nik,
-                    'phone': phone,
-                    'job_role': job_role,
-                    'company': company,
-                    'district': dist_code,
-                    'score': score,
-                    'status': 'LULUS',
-                    'cert_no_sj': cert_no_sj,
-                    'cert_no_in': cert_no_in,
-                    'expiry_date': exp_date
-                }
-                save_training_record(record_payload)
-
-                pdf_sj = generate_certificate(
-                    airline="SJ",
-                    cert_no=cert_no_sj,
-                    name=full_name,
-                    training_date_str=str(training_date)
-                )
-
-                pdf_in = generate_certificate(
-                    airline="IN",
-                    cert_no=cert_no_in,
-                    name=full_name,
-                    training_date_str=str(training_date)
-                )
-
-                st.session_state['exam_result'] = {
-                    'passed': True,
-                    'score': score,
-                    'correct_count': correct_count,
-                    'full_name': full_name,
-                    'pdf_sj': pdf_sj,
-                    'pdf_in': pdf_in
-                }
-            else:
-                record_payload = {
-                    'training_date': str(training_date),
-                    'full_name': full_name,
-                    'nik': nik,
-                    'phone': phone,
-                    'job_role': job_role,
-                    'company': company,
-                    'district': dist_code,
-                    'score': score,
-                    'status': 'TIDAK LULUS',
-                    'cert_no_sj': '-',
-                    'cert_no_in': '-',
-                    'expiry_date': '-'
-                }
-                save_training_record(record_payload)
-                st.session_state['exam_result'] = {
-                    'passed': False,
-                    'score': score,
-                    'correct_count': correct_count
-                }
-
+    # Jika sudah submit dan ada hasilnya, tampilkan hasil dan kunci form
     if 'exam_result' in st.session_state:
         res = st.session_state['exam_result']
-        st.markdown("---")
         if res['passed']:
             st.balloons()
             st.success(f"🎉 SELAMAT! Anda dinyatakan **LULUS** dengan Nilai: **{res['score']} / 100** (Benar: {res['correct_count']}/25).")
@@ -366,8 +241,140 @@ if menu == "Ujian DG Awareness":
                     use_container_width=True,
                     key="btn_download_in"
                 )
+            st.info("ℹ️ Data ujian Anda telah resmi tersimpan. Silakan simpan dan unduh dokumen sertifikat di atas.")
         else:
             st.error(f"MOHON MAAF, Anda dinyatakan **BELUM LULUS** dengan Nilai: **{res['score']} / 100** (Benar: {res['correct_count']}/25). Passing grade: 80.")
+            if st.button("🔄 Ulangi Ujian", type="primary"):
+                del st.session_state['exam_result']
+                st.rerun()
+
+    else:
+        # Form pengerjaan ujian hanya tampil jika belum submit / mengulang
+        st.subheader("1. Data Diri Peserta")
+        col1, col2 = st.columns(2)
+        with col1:
+            full_name = st.text_input("Nama Lengkap*")
+            nik = st.text_input("NIK / Employee ID*")
+            phone = st.text_input("No. Handphone / WhatsApp*")
+            job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
+            
+            if job_role_selected == "Lainnya":
+                custom_role = st.text_input("Sebutkan Jabatan / Unit Kerja Anda*")
+                job_role = custom_role.strip()
+            else:
+                job_role = job_role_selected
+
+        with col2:
+            company = st.text_input("Perusahaan*")
+            dist_df = get_districts()
+            dist_options = dist_df['code'] + " - " + dist_df['name'] if not dist_df.empty else []
+            selected_dist = st.selectbox("Distrik Penugasan*", dist_options)
+            training_date = st.date_input("Tanggal Pelaksanaan Training", date.today())
+
+        st.subheader("2. Lembar Soal Ujian (25 Soal)")
+        
+        with st.form("exam_form"):
+            user_answers = {}
+            for i, q in enumerate(QUESTIONS):
+                st.markdown(f"**Soal {i+1}:** {q['question']}")
+                user_answers[i] = st.radio(
+                    f"Pilih jawaban untuk nomor {i+1}:",
+                    options=q['options'],
+                    key=f"q_{i}",
+                    index=None
+                )
+                st.write("")
+
+            submit_btn = st.form_submit_button("Submit Jawaban & Evaluasi Nilai", type="primary")
+
+        if submit_btn:
+            if not full_name or not nik or not phone or not company or not selected_dist or not job_role:
+                st.error("Mohon lengkapi seluruh kolom Data Diri Peserta (termasuk No. Handphone) sebelum submit!")
+            elif any(user_answers[i] is None for i in range(len(QUESTIONS))):
+                st.warning("Pastikan seluruh 25 soal telah dijawab!")
+            else:
+                with st.spinner("Sedang memproses evaluasi nilai dan menyimpan sertifikat..."):
+                    correct_count = 0
+                    for i, q in enumerate(QUESTIONS):
+                        selected_val = user_answers[i]
+                        raw_ans = q['answer']
+                        if isinstance(raw_ans, int):
+                            correct_val = q['options'][raw_ans]
+                        else:
+                            correct_val = str(raw_ans)
+                        
+                        if str(selected_val).strip().lower() == str(correct_val).strip().lower():
+                            correct_count += 1
+
+                    score = correct_count * 4
+                    dist_code = selected_dist.split(" - ")[0]
+                    passed = score >= 80
+
+                    if passed:
+                        cert_no_sj = get_next_cert_number("SJ")
+                        cert_no_in = get_next_cert_number("IN")
+                        exp_date = (training_date + relativedelta(months=24)).strftime("%Y-%m-%d")
+
+                        record_payload = {
+                            'training_date': str(training_date),
+                            'full_name': full_name,
+                            'nik': nik,
+                            'phone': phone,
+                            'job_role': job_role,
+                            'company': company,
+                            'district': dist_code,
+                            'score': score,
+                            'status': 'LULUS',
+                            'cert_no_sj': cert_no_sj,
+                            'cert_no_in': cert_no_in,
+                            'expiry_date': exp_date
+                        }
+                        save_training_record(record_payload)
+
+                        pdf_sj = generate_certificate(
+                            airline="SJ",
+                            cert_no=cert_no_sj,
+                            name=full_name,
+                            training_date_str=str(training_date)
+                        )
+
+                        pdf_in = generate_certificate(
+                            airline="IN",
+                            cert_no=cert_no_in,
+                            name=full_name,
+                            training_date_str=str(training_date)
+                        )
+
+                        st.session_state['exam_result'] = {
+                            'passed': True,
+                            'score': score,
+                            'correct_count': correct_count,
+                            'full_name': full_name,
+                            'pdf_sj': pdf_sj,
+                            'pdf_in': pdf_in
+                        }
+                    else:
+                        record_payload = {
+                            'training_date': str(training_date),
+                            'full_name': full_name,
+                            'nik': nik,
+                            'phone': phone,
+                            'job_role': job_role,
+                            'company': company,
+                            'district': dist_code,
+                            'score': score,
+                            'status': 'TIDAK LULUS',
+                            'cert_no_sj': '-',
+                            'cert_no_in': '-',
+                            'expiry_date': '-'
+                        }
+                        save_training_record(record_payload)
+                        st.session_state['exam_result'] = {
+                            'passed': False,
+                            'score': score,
+                            'correct_count': correct_count
+                        }
+                st.rerun()
 
 
 # ==================== MENU 2: DASHBOARD INSTRUKTUR & RECORDS ====================
