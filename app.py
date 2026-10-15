@@ -49,10 +49,26 @@ if "cert" in query_params:
     cert_query = str(query_params["cert"]).strip()
     
     records_df = get_training_records()
-    matched = records_df[
-        (records_df['cert_no_sj'].astype(str) == cert_query) | 
-        (records_df['cert_no_in'].astype(str) == cert_query)
-    ] if not records_df.empty else pd.DataFrame()
+    matched = pd.DataFrame()
+    
+    if not records_df.empty:
+        # Fungsi pembersih format nomor sertifikat (mencegah bug float/desimal dari Google Sheets)
+        def clean_cert_val(val):
+            if pd.isna(val) or val is None:
+                return ""
+            s = str(val).strip()
+            if s.endswith(".0"):
+                s = s[:-2]
+            return s
+
+        df_check = records_df.copy()
+        df_check['clean_sj'] = df_check['cert_no_sj'].apply(clean_cert_val)
+        df_check['clean_in'] = df_check['cert_no_in'].apply(clean_cert_val)
+
+        matched = df_check[
+            (df_check['clean_sj'] == cert_query) | 
+            (df_check['clean_in'] == cert_query)
+        ]
     
     col_vlogo1, col_vtitle, col_vlogo2 = st.columns([1.5, 5, 1.5])
     with col_vlogo1:
@@ -93,7 +109,8 @@ if "cert" in query_params:
         st.markdown("---")
         st.subheader("Salinan Resmi Dokumen")
         
-        airline_target = "SJ" if str(rec['cert_no_sj']) == cert_query else "IN"
+        clean_sj_val = clean_cert_val(rec['cert_no_sj'])
+        airline_target = "SJ" if clean_sj_val == cert_query else "IN"
         airline_name = "Sriwijaya Air" if airline_target == "SJ" else "NAM Air"
         try:
             cert_pdf = generate_certificate(
@@ -157,7 +174,7 @@ else:
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            if instructor_pin == "Indomiesoto1":
+            if instructor_pin == "admin123":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
