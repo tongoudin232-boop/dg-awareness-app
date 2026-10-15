@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-# Inisialisasi koneksi Google Sheets resmi dari Streamlit
+# Inisialisasi koneksi Google Sheets
 def get_connection():
     return st.connection("gsheets", type=GSheetsConnection)
 
@@ -21,33 +21,33 @@ def init_db():
     if df_dist is None or df_dist.empty:
         default_districts = [
             # Sriwijaya Air
-            {'id': 1, 'code': 'BEJ', 'name': 'Berau', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 2, 'code': 'BPN', 'name': 'Balikpapan', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
+            {'id': 1, 'code': 'BEJ', 'name': 'Berau', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 2, 'code': 'BPN', 'name': 'Balikpapan', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
             {'id': 3, 'code': 'CGK', 'name': 'Cengkareng', 'category': 'Sriwijaya Air', 'last_training_date': '2025-12-05', 'next_due_date': '2027-12-05'},
-            {'id': 4, 'code': 'DPS', 'name': 'Denpasar', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 5, 'code': 'KNO', 'name': 'Medan', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 6, 'code': 'PNK', 'name': 'Pontianak', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 7, 'code': 'SUB', 'name': 'Surabaya', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 8, 'code': 'UPG', 'name': 'Makassar', 'category': 'Sriwijaya Air', 'last_training_date': None, 'next_due_date': None},
+            {'id': 4, 'code': 'DPS', 'name': 'Denpasar', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 5, 'code': 'KNO', 'name': 'Medan', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 6, 'code': 'PNK', 'name': 'Pontianak', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 7, 'code': 'SUB', 'name': 'Surabaya', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 8, 'code': 'UPG', 'name': 'Makassar', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
             
             # NAM Air
-            {'id': 9, 'code': 'BTH', 'name': 'Batam', 'category': 'NAM Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 10, 'code': 'SRG', 'name': 'Semarang', 'category': 'NAM Air', 'last_training_date': None, 'next_due_date': None},
-            {'id': 11, 'code': 'TMC', 'name': 'Tambolaka', 'category': 'NAM Air', 'last_training_date': None, 'next_due_date': None},
+            {'id': 9, 'code': 'BTH', 'name': 'Batam', 'category': 'NAM Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 10, 'code': 'SRG', 'name': 'Semarang', 'category': 'NAM Air', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 11, 'code': 'TMC', 'name': 'Tambolaka', 'category': 'NAM Air', 'last_training_date': '', 'next_due_date': ''},
             
             # Regulated Agent
             {'id': 12, 'code': 'CGK', 'name': 'RA AAP', 'category': 'Regulated Agent', 'last_training_date': '2022-01-11', 'next_due_date': '2024-01-11'},
-            {'id': 13, 'code': 'CGK', 'name': 'RA PERSADA', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 14, 'code': 'CGK', 'name': 'RA BST', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 15, 'code': 'CGK', 'name': 'RA CMU I', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 16, 'code': 'CGK', 'name': 'RA CMU III', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 17, 'code': 'CGK', 'name': 'RA DAPK', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 18, 'code': 'CGK-APK', 'name': 'CGK (APK)', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 19, 'code': 'CGK-DAP', 'name': 'CGK (DAPK)', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 20, 'code': 'CGK-DBM', 'name': 'CGK (DBM)', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None},
-            {'id': 21, 'code': 'CGK-GAT', 'name': 'CGK (GATRANS)', 'category': 'Regulated Agent', 'last_training_date': None, 'next_due_date': None}
+            {'id': 13, 'code': 'CGK', 'name': 'RA PERSADA', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 14, 'code': 'CGK', 'name': 'RA BST', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 15, 'code': 'CGK', 'name': 'RA CMU I', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 16, 'code': 'CGK', 'name': 'RA CMU III', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 17, 'code': 'CGK', 'name': 'RA DAPK', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 18, 'code': 'CGK-APK', 'name': 'CGK (APK)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 19, 'code': 'CGK-DAP', 'name': 'CGK (DAPK)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 20, 'code': 'CGK-DBM', 'name': 'CGK (DBM)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
+            {'id': 21, 'code': 'CGK-GAT', 'name': 'CGK (GATRANS)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''}
         ]
-        df_init = pd.DataFrame(default_districts)
+        df_init = pd.DataFrame(default_districts).fillna('')
         conn.update(worksheet="districts", data=df_init)
 
     # 2. Inisialisasi sheet 'training_records'
@@ -91,10 +91,10 @@ def add_district(code, name, category):
         'code': code.strip().upper(),
         'name': name.strip(),
         'category': category.strip(),
-        'last_training_date': None,
-        'next_due_date': None
+        'last_training_date': '',
+        'next_due_date': ''
     }])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
+    updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
     conn.update(worksheet="districts", data=updated_df)
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
@@ -106,15 +106,15 @@ def update_district_row(dist_id, code, name, category, last_date, due_date):
         df.loc[idx, 'code'] = code.strip().upper()
         df.loc[idx, 'name'] = name.strip()
         df.loc[idx, 'category'] = category.strip()
-        df.loc[idx, 'last_training_date'] = last_date if last_date else None
-        df.loc[idx, 'next_due_date'] = due_date if due_date else None
-        conn.update(worksheet="districts", data=df)
+        df.loc[idx, 'last_training_date'] = last_date if last_date else ''
+        df.loc[idx, 'next_due_date'] = due_date if due_date else ''
+        conn.update(worksheet="districts", data=df.fillna(''))
 
 def delete_district_row(dist_id):
     """Menghapus baris distrik di Google Sheets berdasarkan ID"""
     conn = get_connection()
     df = get_districts()
-    updated_df = df[df['id'] != int(dist_id)].reset_index(drop=True)
+    updated_df = df[df['id'] != int(dist_id)].reset_index(drop=True).fillna('')
     conn.update(worksheet="districts", data=updated_df)
 
 def get_training_records():
@@ -136,7 +136,7 @@ def save_training_record(record_data):
     next_id = 1 if df.empty else int(df['id'].max()) + 1
     record_data['id'] = next_id
     new_row = pd.DataFrame([record_data])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
+    updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
     conn.update(worksheet="training_records", data=updated_df)
 
     # Perbarui jadwal recurrent di master distrik jika peserta lulus
@@ -150,13 +150,13 @@ def save_training_record(record_data):
         if not m_idx.empty:
             df_dist.loc[m_idx, 'last_training_date'] = t_date
             df_dist.loc[m_idx, 'next_due_date'] = next_due
-            conn.update(worksheet="districts", data=df_dist)
+            conn.update(worksheet="districts", data=df_dist.fillna(''))
 
 def delete_training_record(record_id):
     """Menghapus record spesifik di Google Sheets"""
     conn = get_connection()
     df = get_training_records()
-    updated_df = df[df['id'] != int(record_id)].reset_index(drop=True)
+    updated_df = df[df['id'] != int(record_id)].reset_index(drop=True).fillna('')
     conn.update(worksheet="training_records", data=updated_df)
 
 def clear_all_training_records():
@@ -207,7 +207,7 @@ def get_next_cert_number(airline):
             next_seq = current_seq + 1
             df_seq.loc[idx[0], 'current_seq'] = next_seq
 
-    conn.update(worksheet="cert_sequence", data=df_seq)
+    conn.update(worksheet="cert_sequence", data=df_seq.fillna(''))
     return f"{prefix_yymm}{next_seq:04d}"
 
 def reset_cert_sequence():
