@@ -307,7 +307,7 @@ if menu == "Ujian DG Awareness":
             dist_df = get_districts()
             dist_options = dist_df['code'] + " - " + dist_df['name'] if not dist_df.empty else []
             selected_dist = st.selectbox("Distrik Penugasan*", dist_options)
-            training_date = st.date_input("Tanggal Pelaksanaan Training", date.today(), format="DD-MMM-YYYY")
+            training_date = st.date_input("Tanggal Pelaksanaan Training", date.today(), format="DD/MM/YYYY")
 
         st.subheader("2. Lembar Soal Ujian (25 Soal)")
         
