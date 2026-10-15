@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import io
-import sqlite3
 import os
 
 from database import (
@@ -11,7 +10,10 @@ from database import (
     save_training_record,
     get_districts,
     add_district,
+    update_district_row,
+    delete_district_row,
     get_training_records,
+    delete_training_record,
     get_next_cert_number,
     reset_cert_sequence,
     clear_all_training_records
@@ -27,39 +29,8 @@ st.set_page_config(
     page_icon="✈️"
 )
 
-# Inisialisasi Database
+# Inisialisasi Database Google Sheets
 init_db()
-
-# Melepas constraint UNIQUE lama pada tabel districts jika ada di file db fisik eksisting
-def ensure_safe_districts_table():
-    try:
-        conn = sqlite3.connect('dg_training.db')
-        c = conn.cursor()
-        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='districts'")
-        row = c.fetchone()
-        if row and ('UNIQUE' in row[0].upper()):
-            c.execute('''
-                CREATE TABLE IF NOT EXISTS districts_temp (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    code TEXT,
-                    name TEXT,
-                    category TEXT,
-                    last_training_date TEXT,
-                    next_due_date TEXT
-                )
-            ''')
-            c.execute('''
-                INSERT INTO districts_temp (id, code, name, category, last_training_date, next_due_date)
-                SELECT id, code, name, category, last_training_date, next_due_date FROM districts
-            ''')
-            c.execute("DROP TABLE districts")
-            c.execute("ALTER TABLE districts_temp RENAME TO districts")
-            conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-ensure_safe_districts_table()
 
 # Daftar Kategori Lengkap Distrik
 CATEGORY_OPTIONS = [
@@ -81,7 +52,7 @@ if "cert" in query_params:
     matched = records_df[
         (records_df['cert_no_sj'].astype(str) == cert_query) | 
         (records_df['cert_no_in'].astype(str) == cert_query)
-    ]
+    ] if not records_df.empty else pd.DataFrame()
     
     col_vlogo1, col_vtitle, col_vlogo2 = st.columns([1.5, 5, 1.5])
     with col_vlogo1:
@@ -384,25 +355,25 @@ if menu == "Ujian DG Awareness":
 
 # ==================== MENU 2: DASHBOARD INSTRUKTUR & RECORDS ====================
 elif menu == "Dashboard Instruktur & Records":
-    st.title("📊 Training Records & Audit Report")
+    st.title("📊 Training Records & Audit Report (Google Sheets Cloud)")
 
     # Panel Reset Nomor Urut Sertifikat & Bersihkan Record Trial
     with st.expander("⚙️ **Pengaturan Khusus & Reset Data Percobaan (Trial)**", expanded=False):
         c_tool1, c_tool2 = st.columns(2)
         with c_tool1:
             st.markdown("**1. Reset Nomor Sertifikat ke Urutan 0001**")
-            st.caption("Memulai ulang penomoran sertifikat resmi SJ & IN dari nomor urut 0001.")
+            st.caption("Memulai ulang penomoran sertifikat resmi SJ & IN dari nomor urut 0001 di cloud.")
             if st.button("🔄 Reset Nomor Sertifikat ke 1", type="primary"):
                 reset_cert_sequence()
-                st.success("✅ Nomor sertifikat berhasil di-reset! Sertifikat berikutnya akan terbit dengan nomor urut 0001.")
+                st.success("✅ Nomor sertifikat berhasil di-reset! Sertifikat berikutnya akan terbit dari nomor urut 0001.")
                 st.rerun()
 
         with c_tool2:
             st.markdown("**2. Kosongkan Seluruh Data Percobaan (Trial)**")
-            st.caption("Menghapus seluruh riwayat ujian yang ada di tabel ini.")
+            st.caption("Menghapus seluruh riwayat ujian yang ada di tabel Google Sheets.")
             if st.button("⚠️ Hapus Seluruh Data Training", type="secondary"):
                 clear_all_training_records()
-                st.toast("Seluruh record training berhasil dibersihkan!", icon="🗑️")
+                st.toast("Seluruh record training berhasil dibersihkan dari cloud!", icon="🗑️")
                 st.rerun()
 
     st.markdown("---")
@@ -410,7 +381,7 @@ elif menu == "Dashboard Instruktur & Records":
     records_df = get_training_records()
 
     if records_df.empty:
-        st.info("Belum ada data riwayat training. (Tabel bersih)")
+        st.info("Belum ada data riwayat training. (Tabel Google Sheets masih kosong)")
     else:
         # Hapus Record Spesifik Berdasarkan ID / Nama
         with st.expander("🗑️ **Hapus Record Spesifik (Berdasarkan ID / Nama)**", expanded=False):
@@ -421,12 +392,8 @@ elif menu == "Dashboard Instruktur & Records":
             selected_to_delete = st.selectbox("Pilih data yang ingin dihapus permanen:", list(rec_options.keys()))
             if st.button("Hapus Data Terpilih Ini", type="primary"):
                 del_id = rec_options[selected_to_delete]
-                conn = sqlite3.connect('dg_training.db')
-                c = conn.cursor()
-                c.execute("DELETE FROM training_records WHERE id = ?", (del_id,))
-                conn.commit()
-                conn.close()
-                st.success("✅ Data berhasil dihapus permanen dari database!")
+                delete_training_record(del_id)
+                st.success("✅ Data berhasil dihapus permanen dari Google Sheets!")
                 st.rerun()
 
         col1, col2 = st.columns(2)
@@ -466,9 +433,7 @@ elif menu == "Dashboard Instruktur & Records":
                 use_container_width=True
             )
 
-        # =========================================================================
-        # 📝 FITUR GENERATOR DAFTAR KEHADIRAN (ABSENSI RESMI TRAINING)
-        # =========================================================================
+        # Penerbitan Daftar Kehadiran (Absensi)
         st.markdown("---")
         st.subheader("📝 Penerbitan Daftar Kehadiran (Absensi) Training")
         st.caption("Gunakan bagian ini untuk menerbitkan absensi resmi per distrik dan per tanggal kegiatan.")
@@ -596,7 +561,7 @@ elif menu == "Dashboard Instruktur & Records":
                     except Exception as e:
                         st.error(f"Gagal generate Excel: {e}")
 
-        # ------------------- FITUR UNDUH ULANG SERTIFIKAT -------------------
+        # Unduh Ulang Sertifikat
         st.markdown("---")
         st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
         
@@ -674,7 +639,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df = get_districts()
 
     def calculate_status(due_str):
-        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '', 'NaT']:
+        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '', 'nan', 'NaT']:
             return "Belum Ada Riwayat Training"
         try:
             due_dt = datetime.strptime(str(due_str)[:10], "%Y-%m-%d").date()
@@ -688,12 +653,10 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         except Exception:
             return "Format Tanggal Salah"
 
-    dist_df['Status Recurrent'] = dist_df['next_due_date'].apply(calculate_status)
-    dist_df['Hapus'] = False
+    if not dist_df.empty:
+        dist_df['Status Recurrent'] = dist_df['next_due_date'].apply(calculate_status)
 
-    # -------------------------------------------------------------
-    # FITUR 1: EDIT LENGKAP DISTRIK (CODE, NAME, CATEGORY, TANGGAL)
-    # -------------------------------------------------------------
+    # Pusat Edit Manual Data Distrik
     with st.expander("✏️ **Pusat Edit Manual Data Distrik & Jadwal Recurrent**", expanded=True):
         if not dist_df.empty:
             dist_map = {}
@@ -726,18 +689,14 @@ elif menu == "Master Distrik & Jadwal Recurrent":
 
                 b_col1, b_col2 = st.columns([1, 1])
                 with b_col1:
-                    btn_save_manual = st.form_submit_button("💾 Simpan Seluruh Perubahan Baris Ini", type="primary")
+                    btn_save_manual = st.form_submit_button("💾 Simpan Perubahan ke Google Sheets", type="primary")
                 with b_col2:
                     btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                 if btn_save_manual:
-                    conn = sqlite3.connect('dg_training.db')
-                    c = conn.cursor()
-
                     final_last = edit_last.strip() if edit_last.strip() else None
                     final_due = edit_due.strip() if edit_due.strip() else None
 
-                    # Otomatis isi reminder 2 tahun jika Last Training diisi tapi Due Date kosong
                     if final_last and not final_due:
                         try:
                             dt_calc = datetime.strptime(final_last, "%Y-%m-%d").date()
@@ -745,58 +704,35 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                         except Exception:
                             pass
 
-                    try:
-                        c.execute("""
-                            UPDATE districts 
-                            SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ?
-                            WHERE id = ?
-                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), final_last, final_due, int(cur_data['id'])))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui permanen!")
-                        st.rerun()
-                    except sqlite3.IntegrityError:
-                        conn.close()
-                        ensure_safe_districts_table()
-                        conn2 = sqlite3.connect('dg_training.db')
-                        c2 = conn2.cursor()
-                        c2.execute("""
-                            UPDATE districts 
-                            SET code = ?, name = ?, category = ?, last_training_date = ?, next_due_date = ?
-                            WHERE id = ?
-                        """, (edit_code.strip().upper(), edit_name.strip(), edit_cat.strip(), final_last, final_due, int(cur_data['id'])))
-                        conn2.commit()
-                        conn2.close()
-                        st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui!")
-                        st.rerun()
+                    update_district_row(cur_data['id'], edit_code, edit_name, edit_cat, final_last, final_due)
+                    st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui langsung di Google Sheets!")
+                    st.rerun()
 
                 if btn_del_single:
-                    conn = sqlite3.connect('dg_training.db')
-                    c = conn.cursor()
-                    c.execute("DELETE FROM districts WHERE id = ?", (int(cur_data['id']),))
-                    conn.commit()
-                    conn.close()
-                    st.toast(f"Distrik {cur_data['code']} berhasil dihapus permanen!", icon="🗑️")
+                    delete_district_row(cur_data['id'])
+                    st.toast(f"Distrik {cur_data['code']} berhasil dihapus permanen dari Google Sheets!", icon="🗑️")
                     st.rerun()
 
     st.markdown("---")
     st.subheader("📋 Tabel Monitoring Distrik & Recurrent")
 
-    # Render Tabel Monitoring
-    st.dataframe(
-        dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent']],
-        column_config={
-            "id": st.column_config.NumberColumn("ID"),
-            "code": st.column_config.TextColumn("Code"),
-            "name": st.column_config.TextColumn("Name"),
-            "category": st.column_config.TextColumn("Category"),
-            "last_training_date": st.column_config.TextColumn("Last Training Date"),
-            "next_due_date": st.column_config.TextColumn("Next Due Date (Reminder)"),
-            "Status Recurrent": st.column_config.TextColumn("Status Recurrent")
-        },
-        hide_index=True,
-        use_container_width=True
-    )
+    if not dist_df.empty:
+        st.dataframe(
+            dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent']],
+            column_config={
+                "id": st.column_config.NumberColumn("ID"),
+                "code": st.column_config.TextColumn("Code"),
+                "name": st.column_config.TextColumn("Name"),
+                "category": st.column_config.TextColumn("Category"),
+                "last_training_date": st.column_config.TextColumn("Last Training Date"),
+                "next_due_date": st.column_config.TextColumn("Next Due Date (Reminder)"),
+                "Status Recurrent": st.column_config.TextColumn("Status Recurrent")
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.info("Data distrik sedang dimuat dari Google Sheets...")
 
     st.markdown("---")
     st.subheader("➕ Tambah Rute / Distrik Baru")
@@ -809,11 +745,11 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         with c3:
             new_cat = st.selectbox("Kategori", CATEGORY_OPTIONS)
         
-        btn_add = st.form_submit_button("Simpan Distrik Baru")
+        btn_add = st.form_submit_button("Simpan Distrik Baru ke Google Sheets")
         if btn_add:
             if new_code and new_name:
                 add_district(new_code.upper().strip(), new_name.strip(), new_cat)
-                st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!")
+                st.success(f"Distrik {new_code.upper()} berhasil ditambahkan ke Google Sheets!")
                 st.rerun()
             else:
                 st.error("Mohon isi kode dan nama distrik.")
