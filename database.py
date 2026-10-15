@@ -8,104 +8,86 @@ def get_connection():
     return st.connection("gsheets", type=GSheetsConnection)
 
 def init_db():
-    conn = get_connection()
-    try:
-        df_dist = conn.read(worksheet="districts", ttl=0)
-        if df_dist is not None and not df_dist.empty:
-            return
-    except Exception:
-        pass
-
-    try:
-        default_districts = [
-            # Sriwijaya Air
-            {'id': 1, 'code': 'BEJ', 'name': 'Berau', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 2, 'code': 'BPN', 'name': 'Balikpapan', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 3, 'code': 'CGK', 'name': 'Cengkareng', 'category': 'Sriwijaya Air', 'last_training_date': '2025-12-05', 'next_due_date': '2027-12-05'},
-            {'id': 4, 'code': 'DPS', 'name': 'Denpasar', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 5, 'code': 'KNO', 'name': 'Medan', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 6, 'code': 'PNK', 'name': 'Pontianak', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 7, 'code': 'SUB', 'name': 'Surabaya', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 8, 'code': 'UPG', 'name': 'Makassar', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
-            
-            # NAM Air
-            {'id': 9, 'code': 'BTH', 'name': 'Batam', 'category': 'NAM Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 10, 'code': 'SRG', 'name': 'Semarang', 'category': 'NAM Air', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 11, 'code': 'TMC', 'name': 'Tambolaka', 'category': 'NAM Air', 'last_training_date': '', 'next_due_date': ''},
-            
-            # Regulated Agent
-            {'id': 12, 'code': 'CGK', 'name': 'RA AAP', 'category': 'Regulated Agent', 'last_training_date': '2022-01-11', 'next_due_date': '2024-01-11'},
-            {'id': 13, 'code': 'CGK', 'name': 'RA PERSADA', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 14, 'code': 'CGK', 'name': 'RA BST', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 15, 'code': 'CGK', 'name': 'RA CMU I', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 16, 'code': 'CGK', 'name': 'RA CMU III', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 17, 'code': 'CGK', 'name': 'RA DAPK', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 18, 'code': 'CGK-APK', 'name': 'CGK (APK)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 19, 'code': 'CGK-DAP', 'name': 'CGK (DAPK)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 20, 'code': 'CGK-DBM', 'name': 'CGK (DBM)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''},
-            {'id': 21, 'code': 'CGK-GAT', 'name': 'CGK (GATRANS)', 'category': 'Regulated Agent', 'last_training_date': '', 'next_due_date': ''}
-        ]
-        df_init = pd.DataFrame(default_districts).fillna('')
-        conn.update(worksheet="districts", data=df_init)
-    except Exception:
-        pass
+    """
+    Hanya memastikan sheet dapat diakses tanpa menimpa data yang sudah ada.
+    Tidak akan pernah menyuntikkan ulang data distrik default agar distrik yang dihapus tidak muncul lagi.
+    """
+    pass
 
 def get_districts():
+    """Mengambil seluruh data distrik dari Google Sheets urut alfabet"""
     conn = get_connection()
     try:
-        df = conn.read(worksheet="districts", ttl=0)
+        # Cache pendek 2 detik agar UI sangat cepat dan tidak kena rate limit Google
+        df = conn.read(worksheet="districts", ttl=2)
         if df is not None and not df.empty:
-            df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
-            return df.sort_values(by=['code', 'name'], ascending=True).reset_index(drop=True)
-    except Exception:
-        pass
+            df = df.dropna(how='all')
+            if 'id' in df.columns:
+                df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
+                # Bersihkan baris kosong / id 0
+                df = df[df['id'] > 0]
+                return df.sort_values(by=['code', 'name'], ascending=True).reset_index(drop=True)
+    except Exception as e:
+        st.warning(f"Menghubungkan ke Google Sheets: {e}")
     return pd.DataFrame()
 
 def add_district(code, name, category):
+    """Menambah distrik baru langsung ke Google Sheets"""
     conn = get_connection()
     df = get_districts()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
     new_row = pd.DataFrame([{
         'id': next_id,
-        'code': code.strip().upper(),
-        'name': name.strip(),
-        'category': category.strip(),
+        'code': str(code).strip().upper(),
+        'name': str(name).strip(),
+        'category': str(category).strip(),
         'last_training_date': '',
         'next_due_date': ''
     }])
     updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
     conn.update(worksheet="districts", data=updated_df)
+    st.cache_data.clear()
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
+    """Memperbarui baris data distrik di Google Sheets"""
     conn = get_connection()
     df = get_districts()
     idx = df[df['id'] == int(dist_id)].index
     if not idx.empty:
-        df.loc[idx, 'code'] = code.strip().upper()
-        df.loc[idx, 'name'] = name.strip()
-        df.loc[idx, 'category'] = category.strip()
-        df.loc[idx, 'last_training_date'] = last_date if last_date else ''
-        df.loc[idx, 'next_due_date'] = due_date if due_date else ''
+        df.loc[idx, 'code'] = str(code).strip().upper()
+        df.loc[idx, 'name'] = str(name).strip()
+        df.loc[idx, 'category'] = str(category).strip()
+        df.loc[idx, 'last_training_date'] = str(last_date) if last_date else ''
+        df.loc[idx, 'next_due_date'] = str(due_date) if due_date else ''
         conn.update(worksheet="districts", data=df.fillna(''))
+        st.cache_data.clear()
 
 def delete_district_row(dist_id):
+    """Menghapus baris distrik di Google Sheets secara permanen"""
     conn = get_connection()
     df = get_districts()
+    # Filter buang ID yang dipilih
     updated_df = df[df['id'] != int(dist_id)].reset_index(drop=True).fillna('')
     conn.update(worksheet="districts", data=updated_df)
+    st.cache_data.clear()
 
 def get_training_records():
+    """Mengambil riwayat data training dari Google Sheets"""
     conn = get_connection()
     try:
-        df = conn.read(worksheet="training_records", ttl=0)
+        df = conn.read(worksheet="training_records", ttl=2)
         if df is not None and not df.empty:
-            df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
-            return df.sort_values(by='id', ascending=False).reset_index(drop=True)
+            df = df.dropna(how='all')
+            if 'id' in df.columns:
+                df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
+                df = df[df['id'] > 0]
+                return df.sort_values(by='id', ascending=False).reset_index(drop=True)
     except Exception:
         pass
     return pd.DataFrame()
 
 def save_training_record(record_data):
+    """Menyimpan record training peserta dan update tanggal reminder distrik di Google Sheets"""
     conn = get_connection()
     df = get_training_records()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
@@ -128,20 +110,26 @@ def save_training_record(record_data):
                 conn.update(worksheet="districts", data=df_dist.fillna(''))
         except Exception:
             pass
+    st.cache_data.clear()
 
 def delete_training_record(record_id):
+    """Menghapus record spesifik di Google Sheets"""
     conn = get_connection()
     df = get_training_records()
     updated_df = df[df['id'] != int(record_id)].reset_index(drop=True).fillna('')
     conn.update(worksheet="training_records", data=updated_df)
+    st.cache_data.clear()
 
 def clear_all_training_records():
+    """Mengosongkan seluruh riwayat ujian di Google Sheets"""
     conn = get_connection()
     cols = ['id', 'training_date', 'full_name', 'nik', 'phone', 'job_role', 'company', 
             'district', 'score', 'status', 'cert_no_sj', 'cert_no_in', 'expiry_date']
     conn.update(worksheet="training_records", data=pd.DataFrame(columns=cols))
+    st.cache_data.clear()
 
 def get_next_cert_number(airline):
+    """Penomoran sertifikat resmi YYMMxxxx"""
     conn = get_connection()
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
@@ -182,6 +170,8 @@ def get_next_cert_number(airline):
     return f"{prefix_yymm}{next_seq:04d}"
 
 def reset_cert_sequence():
+    """Mereset urutan nomor sertifikat"""
     conn = get_connection()
     cols = ['airline', 'current_seq', 'batch_start_date']
     conn.update(worksheet="cert_sequence", data=pd.DataFrame(columns=cols))
+    st.cache_data.clear()
