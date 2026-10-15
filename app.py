@@ -725,17 +725,25 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             cur_data = dist_map[sel_dist_lbl]
 
             # Parse tanggal lama dari database
-            raw_last = str(cur_data['last_training_date']).strip()
-            init_last_dt = None
-            has_history = False
+            raw_last = str(cur_data.get('last_training_date', '')).strip()
+            raw_due = str(cur_data.get('next_due_date', '')).strip()
+
+            has_valid_history = False
+            default_last = date.today()
+            default_due = date.today() + relativedelta(months=24)
+
             if raw_last and raw_last not in ['None', '', 'nan', 'NaT']:
                 try:
-                    init_last_dt = datetime.strptime(raw_last[:10], "%Y-%m-%d").date()
-                    has_history = True
+                    default_last = datetime.strptime(raw_last[:10], "%Y-%m-%d").date()
+                    has_valid_history = True
                 except Exception:
-                    init_last_dt = date.today()
-            else:
-                init_last_dt = date.today()
+                    pass
+
+            if raw_due and raw_due not in ['None', '', 'nan', 'NaT']:
+                try:
+                    default_due = datetime.strptime(raw_due[:10], "%Y-%m-%d").date()
+                except Exception:
+                    default_due = default_last + relativedelta(months=24)
 
             with st.form("form_edit_manual_distrik"):
                 e_c1, e_c2, e_c3 = st.columns(3)
@@ -748,25 +756,25 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     edit_cat = st.selectbox("Kategori", CATEGORY_OPTIONS, index=cat_idx)
 
                 st.markdown("---")
-                # Checkbox untuk menentukan apakah ada riwayat training
-                check_training = st.checkbox("Distrik ini memiliki riwayat pelatihan", value=has_history)
-                
+                status_history = st.radio(
+                    "Status Riwayat Pelatihan:",
+                    options=["Ada Riwayat Training", "Belum Ada Riwayat (Kosongkan Tanggal)"],
+                    index=0 if has_valid_history else 1,
+                    horizontal=True
+                )
+
                 e_c4, e_c5 = st.columns(2)
                 with e_c4:
                     edit_last_date = st.date_input(
-                        "Last Training Date",
-                        value=init_last_dt,
-                        format="DD-MMM-YYYY",
-                        disabled=not check_training
+                        "Last Training Date (Klik kalender):",
+                        value=default_last,
+                        format="DD/MM/YYYY"
                     )
                 with e_c5:
-                    # Otomatis hitung +24 bulan (2 tahun) jika tanggal diubah
-                    calc_due = edit_last_date + relativedelta(months=24) if check_training else date.today() + relativedelta(months=24)
                     edit_due_date = st.date_input(
-                        "Next Due Date (Recurrent)",
-                        value=calc_due,
-                        format="DD-MMM-YYYY",
-                        disabled=not check_training
+                        "Next Due Date (Klik kalender):",
+                        value=default_due,
+                        format="DD/MM/YYYY"
                     )
 
                 st.markdown("---")
@@ -777,7 +785,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                 if btn_save_manual:
-                    if check_training:
+                    if status_history == "Ada Riwayat Training":
                         final_last = edit_last_date.strftime("%Y-%m-%d")
                         final_due = edit_due_date.strftime("%Y-%m-%d")
                     else:
@@ -799,7 +807,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     if not dist_df.empty:
         df_display = dist_df.copy()
         
-        # Format tampilan tanggal di tabel menjadi DD-MMM-YYYY yang rapi
+        # Tampilan tabel tetap menggunakan format teks DD-MMM-YYYY yang mudah dibaca
         def format_date_display(d_str):
             if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']:
                 return "-"
