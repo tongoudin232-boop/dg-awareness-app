@@ -6,3 +6,4 @@ pypdf
 qrcode
 pillow
 python-dateutil
+st-gsheets-connection
