@@ -32,6 +32,52 @@ st.set_page_config(
 # Inisialisasi Database Google Sheets
 init_db()
 
+# Inisialisasi Session State Login Instruktur
+if "is_instructor" not in st.session_state:
+    st.session_state["is_instructor"] = False
+
+# ==================== KONTROL TAMPILAN HEADER & MENU ====================
+# Sembunyikan Fork, GitHub, dan Menu Bawaan untuk Peserta Umum
+if not st.session_state["is_instructor"]:
+    st.markdown(
+        """
+        <style>
+        /* Sembunyikan toolbar kanan atas (Fork, GitHub, Deploy button, Titik tiga) */
+        header[data-testid="stHeader"] {
+            background-color: transparent !important;
+        }
+        [data-testid="stToolbar"] {
+            display: none !important;
+        }
+        [data-testid="stDecoration"] {
+            display: none !important;
+        }
+        /* Sembunyikan footer bawaan Streamlit */
+        footer {
+            display: none !important;
+        }
+        /* Pertahankan tombol panah pembuka sidebar agar tetap bisa login */
+        [data-testid="collapsedControl"] {
+            display: flex !important;
+            z-index: 1000001 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    # Tampilkan kembali toolbar untuk Instruktur
+    st.markdown(
+        """
+        <style>
+        [data-testid="stToolbar"] {
+            display: flex !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 # Daftar Kategori Lengkap Distrik
 CATEGORY_OPTIONS = [
     "Sriwijaya Air",
@@ -148,9 +194,6 @@ JOB_ROLES = [
 ]
 
 # ==================== SISTEM AKSES INSTRUKTUR (SIDEBAR) ====================
-if "is_instructor" not in st.session_state:
-    st.session_state["is_instructor"] = False
-
 if os.path.exists("logo_sriwijaya.png"):
     st.sidebar.image("logo_sriwijaya.png", use_container_width=True)
 
@@ -215,7 +258,7 @@ if menu == "Ujian DG Awareness":
         - Peserta yang lulus langsung memperoleh **2 Sertifikat Resmi** (Sriwijaya Air & NAM Air).
         """)
 
-    # Jika sudah submit dan ada hasilnya, tampilkan hasil dan kunci form
+    # Kunci tampilan jika sudah submit
     if 'exam_result' in st.session_state:
         res = st.session_state['exam_result']
         if res['passed']:
@@ -249,7 +292,7 @@ if menu == "Ujian DG Awareness":
                 st.rerun()
 
     else:
-        # Form pengerjaan ujian hanya tampil jika belum submit / mengulang
+        # Form pengisian ujian
         st.subheader("1. Data Diri Peserta")
         col1, col2 = st.columns(2)
         with col1:
