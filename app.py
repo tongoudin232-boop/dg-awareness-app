@@ -42,7 +42,6 @@ if not st.session_state["is_instructor"]:
     st.markdown(
         """
         <style>
-        /* Sembunyikan toolbar kanan atas (Fork, GitHub, Deploy button, Titik tiga) */
         header[data-testid="stHeader"] {
             background-color: transparent !important;
         }
@@ -52,11 +51,9 @@ if not st.session_state["is_instructor"]:
         [data-testid="stDecoration"] {
             display: none !important;
         }
-        /* Sembunyikan footer bawaan Streamlit */
         footer {
             display: none !important;
         }
-        /* Pertahankan tombol panah pembuka sidebar agar tetap bisa login */
         [data-testid="collapsedControl"] {
             display: flex !important;
             z-index: 1000001 !important;
@@ -66,7 +63,6 @@ if not st.session_state["is_instructor"]:
         unsafe_allow_html=True
     )
 else:
-    # Tampilkan kembali toolbar untuk Instruktur
     st.markdown(
         """
         <style>
@@ -292,7 +288,6 @@ if menu == "Ujian DG Awareness":
                 st.rerun()
 
     else:
-        # Form pengisian ujian
         st.subheader("1. Data Diri Peserta")
         col1, col2 = st.columns(2)
         with col1:
@@ -312,7 +307,7 @@ if menu == "Ujian DG Awareness":
             dist_df = get_districts()
             dist_options = dist_df['code'] + " - " + dist_df['name'] if not dist_df.empty else []
             selected_dist = st.selectbox("Distrik Penugasan*", dist_options)
-            training_date = st.date_input("Tanggal Pelaksanaan Training", date.today())
+            training_date = st.date_input("Tanggal Pelaksanaan Training", date.today(), format="DD-MMM-YYYY")
 
         st.subheader("2. Lembar Soal Ujian (25 Soal)")
         
@@ -424,7 +419,6 @@ if menu == "Ujian DG Awareness":
 elif menu == "Dashboard Instruktur & Records":
     st.title("📊 Training Records & Audit Report (Google Sheets Cloud)")
 
-    # Panel Reset Nomor Urut Sertifikat & Bersihkan Record Trial
     with st.expander("⚙️ **Pengaturan Khusus & Reset Data Percobaan (Trial)**", expanded=False):
         c_tool1, c_tool2 = st.columns(2)
         with c_tool1:
@@ -450,7 +444,6 @@ elif menu == "Dashboard Instruktur & Records":
     if records_df.empty:
         st.info("Belum ada data riwayat training. (Tabel Google Sheets masih kosong)")
     else:
-        # Hapus Record Spesifik Berdasarkan ID / Nama
         with st.expander("🗑️ **Hapus Record Spesifik (Berdasarkan ID / Nama)**", expanded=False):
             rec_options = {
                 f"ID {r['id']} | {r['full_name']} ({r['district']}) - Tgl: {r['training_date']}": r['id']
@@ -720,9 +713,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         except Exception:
             return "Format Tanggal Salah"
 
-    if not dist_df.empty:
-        dist_df['Status Recurrent'] = dist_df['next_due_date'].apply(calculate_status)
-
     # Pusat Edit Manual Data Distrik
     with st.expander("✏️ **Pusat Edit Manual Data Distrik & Jadwal Recurrent**", expanded=True):
         if not dist_df.empty:
@@ -734,6 +724,19 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             sel_dist_lbl = st.selectbox("Pilih Distrik yang Ingin Diubah:", list(dist_map.keys()))
             cur_data = dist_map[sel_dist_lbl]
 
+            # Parse tanggal lama dari database
+            raw_last = str(cur_data['last_training_date']).strip()
+            init_last_dt = None
+            has_history = False
+            if raw_last and raw_last not in ['None', '', 'nan', 'NaT']:
+                try:
+                    init_last_dt = datetime.strptime(raw_last[:10], "%Y-%m-%d").date()
+                    has_history = True
+                except Exception:
+                    init_last_dt = date.today()
+            else:
+                init_last_dt = date.today()
+
             with st.form("form_edit_manual_distrik"):
                 e_c1, e_c2, e_c3 = st.columns(3)
                 with e_c1:
@@ -744,16 +747,29 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     cat_idx = CATEGORY_OPTIONS.index(cur_data['category']) if cur_data['category'] in CATEGORY_OPTIONS else 0
                     edit_cat = st.selectbox("Kategori", CATEGORY_OPTIONS, index=cat_idx)
 
+                st.markdown("---")
+                # Checkbox untuk menentukan apakah ada riwayat training
+                check_training = st.checkbox("Distrik ini memiliki riwayat pelatihan", value=has_history)
+                
                 e_c4, e_c5 = st.columns(2)
                 with e_c4:
-                    raw_last = str(cur_data['last_training_date'])
-                    val_last = raw_last[:10] if raw_last not in ['None', '', 'nan', 'NaT'] else ""
-                    edit_last = st.text_input("Last Training Date (Format: YYYY-MM-DD)", value=val_last)
+                    edit_last_date = st.date_input(
+                        "Last Training Date",
+                        value=init_last_dt,
+                        format="DD-MMM-YYYY",
+                        disabled=not check_training
+                    )
                 with e_c5:
-                    raw_due = str(cur_data['next_due_date'])
-                    val_due = raw_due[:10] if raw_due not in ['None', '', 'nan', 'NaT'] else ""
-                    edit_due = st.text_input("Next Due Date (Format: YYYY-MM-DD)", value=val_due)
+                    # Otomatis hitung +24 bulan (2 tahun) jika tanggal diubah
+                    calc_due = edit_last_date + relativedelta(months=24) if check_training else date.today() + relativedelta(months=24)
+                    edit_due_date = st.date_input(
+                        "Next Due Date (Recurrent)",
+                        value=calc_due,
+                        format="DD-MMM-YYYY",
+                        disabled=not check_training
+                    )
 
+                st.markdown("---")
                 b_col1, b_col2 = st.columns([1, 1])
                 with b_col1:
                     btn_save_manual = st.form_submit_button("💾 Simpan Perubahan ke Google Sheets", type="primary")
@@ -761,15 +777,12 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                 if btn_save_manual:
-                    final_last = edit_last.strip() if edit_last.strip() else None
-                    final_due = edit_due.strip() if edit_due.strip() else None
-
-                    if final_last and not final_due:
-                        try:
-                            dt_calc = datetime.strptime(final_last, "%Y-%m-%d").date()
-                            final_due = dt_calc.replace(year=dt_calc.year + 2).strftime("%Y-%m-%d")
-                        except Exception:
-                            pass
+                    if check_training:
+                        final_last = edit_last_date.strftime("%Y-%m-%d")
+                        final_due = edit_due_date.strftime("%Y-%m-%d")
+                    else:
+                        final_last = ""
+                        final_due = ""
 
                     update_district_row(cur_data['id'], edit_code, edit_name, edit_cat, final_last, final_due)
                     st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui langsung di Google Sheets!")
@@ -784,15 +797,30 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     st.subheader("📋 Tabel Monitoring Distrik & Recurrent")
 
     if not dist_df.empty:
+        df_display = dist_df.copy()
+        
+        # Format tampilan tanggal di tabel menjadi DD-MMM-YYYY yang rapi
+        def format_date_display(d_str):
+            if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']:
+                return "-"
+            try:
+                return datetime.strptime(str(d_str)[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
+            except Exception:
+                return str(d_str)
+
+        df_display['Status Recurrent'] = df_display['next_due_date'].apply(calculate_status)
+        df_display['Last Training Date'] = df_display['last_training_date'].apply(format_date_display)
+        df_display['Next Due Date (Reminder)'] = df_display['next_due_date'].apply(format_date_display)
+
         st.dataframe(
-            dist_df[['id', 'code', 'name', 'category', 'last_training_date', 'next_due_date', 'Status Recurrent']],
+            df_display[['id', 'code', 'name', 'category', 'Last Training Date', 'Next Due Date (Reminder)', 'Status Recurrent']],
             column_config={
                 "id": st.column_config.NumberColumn("ID"),
                 "code": st.column_config.TextColumn("Code"),
                 "name": st.column_config.TextColumn("Name"),
                 "category": st.column_config.TextColumn("Category"),
-                "last_training_date": st.column_config.TextColumn("Last Training Date"),
-                "next_due_date": st.column_config.TextColumn("Next Due Date (Reminder)"),
+                "Last Training Date": st.column_config.TextColumn("Last Training Date"),
+                "Next Due Date (Reminder)": st.column_config.TextColumn("Next Due Date (Reminder)"),
                 "Status Recurrent": st.column_config.TextColumn("Status Recurrent")
             },
             hide_index=True,
