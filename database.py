@@ -4,21 +4,19 @@ import pandas as pd
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-# Inisialisasi koneksi Google Sheets
 def get_connection():
     return st.connection("gsheets", type=GSheetsConnection)
 
 def init_db():
-    """Memeriksa dan membuat struktur tabel awal di Google Sheets jika masih kosong"""
     conn = get_connection()
-    
-    # 1. Pastikan Sheet 'districts' ada & terisi
     try:
         df_dist = conn.read(worksheet="districts", ttl=0)
+        if df_dist is not None and not df_dist.empty:
+            return
     except Exception:
-        df_dist = pd.DataFrame()
-        
-    if df_dist is None or df_dist.empty:
+        pass
+
+    try:
         default_districts = [
             # Sriwijaya Air
             {'id': 1, 'code': 'BEJ', 'name': 'Berau', 'category': 'Sriwijaya Air', 'last_training_date': '', 'next_due_date': ''},
@@ -49,28 +47,10 @@ def init_db():
         ]
         df_init = pd.DataFrame(default_districts).fillna('')
         conn.update(worksheet="districts", data=df_init)
-
-    # 2. Inisialisasi sheet 'training_records'
-    try:
-        df_rec = conn.read(worksheet="training_records", ttl=0)
     except Exception:
-        df_rec = pd.DataFrame()
-    if df_rec is None or df_rec.empty:
-        cols = ['id', 'training_date', 'full_name', 'nik', 'phone', 'job_role', 'company', 
-                'district', 'score', 'status', 'cert_no_sj', 'cert_no_in', 'expiry_date']
-        conn.update(worksheet="training_records", data=pd.DataFrame(columns=cols))
-
-    # 3. Inisialisasi sheet 'cert_sequence'
-    try:
-        df_seq = conn.read(worksheet="cert_sequence", ttl=0)
-    except Exception:
-        df_seq = pd.DataFrame()
-    if df_seq is None or df_seq.empty:
-        cols = ['airline', 'current_seq', 'batch_start_date']
-        conn.update(worksheet="cert_sequence", data=pd.DataFrame(columns=cols))
+        pass
 
 def get_districts():
-    """Mengambil seluruh data distrik dari Google Sheets urut alfabet"""
     conn = get_connection()
     try:
         df = conn.read(worksheet="districts", ttl=0)
@@ -82,7 +62,6 @@ def get_districts():
     return pd.DataFrame()
 
 def add_district(code, name, category):
-    """Menambah distrik baru langsung ke Google Sheets"""
     conn = get_connection()
     df = get_districts()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
@@ -98,7 +77,6 @@ def add_district(code, name, category):
     conn.update(worksheet="districts", data=updated_df)
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
-    """Memperbarui baris data distrik di Google Sheets"""
     conn = get_connection()
     df = get_districts()
     idx = df[df['id'] == int(dist_id)].index
@@ -111,14 +89,12 @@ def update_district_row(dist_id, code, name, category, last_date, due_date):
         conn.update(worksheet="districts", data=df.fillna(''))
 
 def delete_district_row(dist_id):
-    """Menghapus baris distrik di Google Sheets berdasarkan ID"""
     conn = get_connection()
     df = get_districts()
     updated_df = df[df['id'] != int(dist_id)].reset_index(drop=True).fillna('')
     conn.update(worksheet="districts", data=updated_df)
 
 def get_training_records():
-    """Mengambil riwayat data training dari Google Sheets"""
     conn = get_connection()
     try:
         df = conn.read(worksheet="training_records", ttl=0)
@@ -130,7 +106,6 @@ def get_training_records():
     return pd.DataFrame()
 
 def save_training_record(record_data):
-    """Menyimpan record training peserta dan update tanggal reminder distrik di Google Sheets"""
     conn = get_connection()
     df = get_training_records()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
@@ -139,38 +114,34 @@ def save_training_record(record_data):
     updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
     conn.update(worksheet="training_records", data=updated_df)
 
-    # Perbarui jadwal recurrent di master distrik jika peserta lulus
     if record_data.get('status') == 'LULUS':
         t_date = record_data['training_date']
-        dt_obj = datetime.strptime(str(t_date)[:10], "%Y-%m-%d").date()
-        next_due = dt_obj.replace(year=dt_obj.year + 2).strftime("%Y-%m-%d")
-        
-        df_dist = get_districts()
-        m_idx = df_dist[df_dist['code'] == record_data['district']].index
-        if not m_idx.empty:
-            df_dist.loc[m_idx, 'last_training_date'] = t_date
-            df_dist.loc[m_idx, 'next_due_date'] = next_due
-            conn.update(worksheet="districts", data=df_dist.fillna(''))
+        try:
+            dt_obj = datetime.strptime(str(t_date)[:10], "%Y-%m-%d").date()
+            next_due = dt_obj.replace(year=dt_obj.year + 2).strftime("%Y-%m-%d")
+            
+            df_dist = get_districts()
+            m_idx = df_dist[df_dist['code'] == record_data['district']].index
+            if not m_idx.empty:
+                df_dist.loc[m_idx, 'last_training_date'] = str(t_date)
+                df_dist.loc[m_idx, 'next_due_date'] = next_due
+                conn.update(worksheet="districts", data=df_dist.fillna(''))
+        except Exception:
+            pass
 
 def delete_training_record(record_id):
-    """Menghapus record spesifik di Google Sheets"""
     conn = get_connection()
     df = get_training_records()
     updated_df = df[df['id'] != int(record_id)].reset_index(drop=True).fillna('')
     conn.update(worksheet="training_records", data=updated_df)
 
 def clear_all_training_records():
-    """Mengosongkan seluruh riwayat ujian di Google Sheets"""
     conn = get_connection()
     cols = ['id', 'training_date', 'full_name', 'nik', 'phone', 'job_role', 'company', 
             'district', 'score', 'status', 'cert_no_sj', 'cert_no_in', 'expiry_date']
     conn.update(worksheet="training_records", data=pd.DataFrame(columns=cols))
 
 def get_next_cert_number(airline):
-    """
-    Format nomor sertifikat: YYMMxxxx (contoh: 26100001)
-    Sequence otomatis reset setiap siklus 24 bulan dari batch pertama di Google Sheets.
-    """
     conn = get_connection()
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
@@ -211,7 +182,6 @@ def get_next_cert_number(airline):
     return f"{prefix_yymm}{next_seq:04d}"
 
 def reset_cert_sequence():
-    """Mereset sequence nomor urut sertifikat ke awal di Google Sheets"""
     conn = get_connection()
     cols = ['airline', 'current_seq', 'batch_start_date']
     conn.update(worksheet="cert_sequence", data=pd.DataFrame(columns=cols))
