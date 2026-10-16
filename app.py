@@ -21,6 +21,7 @@ from database import (
 from exam_data import QUESTIONS
 from cert_generator import generate_certificate
 from attendance_generator import generate_attendance_pdf, generate_attendance_excel
+from materi_module import render_materi_module
 
 # ==================== KONFIGURASI HALAMAN ====================
 st.set_page_config(
@@ -37,12 +38,10 @@ if "is_instructor" not in st.session_state:
     st.session_state["is_instructor"] = False
 
 # ==================== KONTROL TAMPILAN HEADER, BADGE PROFIL & MENU ====================
-# Sembunyikan Fork, GitHub, Toolbar, dan Badge Profil untuk Peserta Umum
 if not st.session_state["is_instructor"]:
     st.markdown(
         """
         <style>
-        /* 1. Sembunyikan Header atas bawaan Streamlit */
         header[data-testid="stHeader"] {
             background-color: transparent !important;
         }
@@ -55,13 +54,13 @@ if not st.session_state["is_instructor"]:
         footer {
             display: none !important;
         }
-
-        /* 2. Sembunyikan Badge Profil Bulat Biru & Popover View Profile */
+        [data-testid="stStatusWidget"],
+        .viewerBadge_container__1QSob,
+        .viewerBadge_link__1S137,
         div[class*="viewerBadge"],
         div[class*="ProfileBadge"],
         div[class*="StatusWidget"],
-        [data-testid="stStatusWidget"],
-        [data-testid="stActionButton"],
+        div[data-testid="stActionButton"],
         a[href*="share.streamlit.io/user"],
         div[data-baseweb="popover"],
         div[role="tooltip"],
@@ -71,15 +70,6 @@ if not st.session_state["is_instructor"]:
             opacity: 0 !important;
             pointer-events: none !important;
         }
-
-        /* Hilangkan container tombol floating kanan bawah */
-        .viewerBadge_container__1QSob,
-        .viewerBadge_link__1S137,
-        div[style*="position: fixed; bottom:"] a[href*="share.streamlit.io"] {
-            display: none !important;
-        }
-
-        /* 3. Pertahankan tombol panah sidebar agar Instruktur tetap bisa login */
         [data-testid="collapsedControl"] {
             display: flex !important;
             z-index: 1000001 !important;
@@ -89,7 +79,6 @@ if not st.session_state["is_instructor"]:
         unsafe_allow_html=True
     )
 else:
-    # Tampilkan kembali toolbar untuk Instruktur
     st.markdown(
         """
         <style>
@@ -224,6 +213,7 @@ st.sidebar.title("Navigasi")
 
 if st.session_state["is_instructor"]:
     menu_options = [
+        "Modul Materi DG Awareness",
         "Ujian DG Awareness",
         "Dashboard Instruktur & Records",
         "Master Distrik & Jadwal Recurrent"
@@ -235,11 +225,16 @@ if st.session_state["is_instructor"]:
         st.session_state["is_instructor"] = False
         st.rerun()
 else:
-    menu = "Ujian DG Awareness"
+    menu_options = [
+        "Modul Materi DG Awareness",
+        "Ujian DG Awareness"
+    ]
+    menu = st.sidebar.radio("Navigasi Menu", menu_options)
+
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
         if st.button("Masuk"):
-            if instructor_pin == "Indomiesoto1":
+            if instructor_pin == "admin123":
                 st.session_state["is_instructor"] = True
                 st.success("Login berhasil!")
                 st.rerun()
@@ -247,8 +242,13 @@ else:
                 st.error("PIN salah!")
 
 
-# ==================== MENU 1: UJIAN DG AWARENESS ====================
-if menu == "Ujian DG Awareness":
+# ==================== MENU 1: MODUL MATERI DG AWARENESS ====================
+if menu == "Modul Materi DG Awareness":
+    render_materi_module()
+
+
+# ==================== MENU 2: UJIAN DG AWARENESS ====================
+elif menu == "Ujian DG Awareness":
     col_logo1, col_title, col_logo2 = st.columns([1.5, 5, 1.5])
     with col_logo1:
         if os.path.exists("logo_sriwijaya.png"):
@@ -449,7 +449,7 @@ if menu == "Ujian DG Awareness":
                 st.rerun()
 
 
-# ==================== MENU 2: DASHBOARD INSTRUKTUR & RECORDS ====================
+# ==================== MENU 3: DASHBOARD INSTRUKTUR & RECORDS ====================
 elif menu == "Dashboard Instruktur & Records":
     st.title("📊 Training Records & Audit Report (Google Sheets Cloud)")
 
@@ -726,7 +726,7 @@ elif menu == "Dashboard Instruktur & Records":
                     st.error(f"Gagal mencetak ulang sertifikat IN: {e}")
 
 
-# ==================== MENU 3: MASTER DISTRIK & RECURRENT ====================
+# ==================== MENU 4: MASTER DISTRIK & RECURRENT ====================
 elif menu == "Master Distrik & Jadwal Recurrent":
     st.title("📍 Master Distrik & Monitoring Recurrent (24 Bulan)")
 
