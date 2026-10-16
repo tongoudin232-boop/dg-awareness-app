@@ -254,7 +254,7 @@ if menu == "Ujian DG Awareness":
         - Peserta yang lulus langsung memperoleh **2 Sertifikat Resmi** (Sriwijaya Air & NAM Air).
         """)
 
-    # Kunci tampilan jika sudah submit
+    # Tampilan hasil & penguncian form jika sudah disubmit
     if 'exam_result' in st.session_state:
         res = st.session_state['exam_result']
         if res['passed']:
@@ -345,8 +345,16 @@ if menu == "Ujian DG Awareness":
                             correct_count += 1
 
                     score = correct_count * 4
-                    dist_code = selected_dist.split(" - ")[0]
+                    
+                    # Pecah kode dan nama distrik agar spesifik
+                    dist_parts = selected_dist.split(" - ")
+                    dist_code = dist_parts[0].strip()
+                    dist_name = dist_parts[1].strip() if len(dist_parts) > 1 else ""
+                    
                     passed = score >= 80
+
+                    # Bersihkan format nomor HP dari trailing space
+                    clean_phone_str = str(phone).strip()
 
                     if passed:
                         cert_no_sj = get_next_cert_number("SJ")
@@ -355,12 +363,13 @@ if menu == "Ujian DG Awareness":
 
                         record_payload = {
                             'training_date': str(training_date),
-                            'full_name': full_name,
-                            'nik': nik,
-                            'phone': phone,
-                            'job_role': job_role,
-                            'company': company,
+                            'full_name': full_name.strip(),
+                            'nik': nik.strip(),
+                            'phone': clean_phone_str,
+                            'job_role': job_role.strip(),
+                            'company': company.strip(),
                             'district': dist_code,
+                            'district_name': dist_name,
                             'score': score,
                             'status': 'LULUS',
                             'cert_no_sj': cert_no_sj,
@@ -372,14 +381,14 @@ if menu == "Ujian DG Awareness":
                         pdf_sj = generate_certificate(
                             airline="SJ",
                             cert_no=cert_no_sj,
-                            name=full_name,
+                            name=full_name.strip(),
                             training_date_str=str(training_date)
                         )
 
                         pdf_in = generate_certificate(
                             airline="IN",
                             cert_no=cert_no_in,
-                            name=full_name,
+                            name=full_name.strip(),
                             training_date_str=str(training_date)
                         )
 
@@ -387,19 +396,20 @@ if menu == "Ujian DG Awareness":
                             'passed': True,
                             'score': score,
                             'correct_count': correct_count,
-                            'full_name': full_name,
+                            'full_name': full_name.strip(),
                             'pdf_sj': pdf_sj,
                             'pdf_in': pdf_in
                         }
                     else:
                         record_payload = {
                             'training_date': str(training_date),
-                            'full_name': full_name,
-                            'nik': nik,
-                            'phone': phone,
-                            'job_role': job_role,
-                            'company': company,
+                            'full_name': full_name.strip(),
+                            'nik': nik.strip(),
+                            'phone': clean_phone_str,
+                            'job_role': job_role.strip(),
+                            'company': company.strip(),
                             'district': dist_code,
+                            'district_name': dist_name,
                             'score': score,
                             'status': 'TIDAK LULUS',
                             'cert_no_sj': '-',
@@ -724,7 +734,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             sel_dist_lbl = st.selectbox("Pilih Distrik yang Ingin Diubah:", list(dist_map.keys()))
             cur_data = dist_map[sel_dist_lbl]
 
-            # Parse tanggal lama dari database
             raw_last = str(cur_data.get('last_training_date', '')).strip()
             raw_due = str(cur_data.get('next_due_date', '')).strip()
 
@@ -793,7 +802,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                         final_due = ""
 
                     update_district_row(cur_data['id'], edit_code, edit_name, edit_cat, final_last, final_due)
-                    st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()}) berhasil diperbarui langsung di Google Sheets!")
+                    st.success(f"✅ Data ID {cur_data['id']} ({edit_code.strip().upper()} - {edit_name.strip()}) berhasil diperbarui langsung di Google Sheets!")
                     st.rerun()
 
                 if btn_del_single:
@@ -807,7 +816,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     if not dist_df.empty:
         df_display = dist_df.copy()
         
-        # Tampilan tabel tetap menggunakan format teks DD-MMM-YYYY yang mudah dibaca
         def format_date_display(d_str):
             if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']:
                 return "-"
