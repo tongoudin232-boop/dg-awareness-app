@@ -42,7 +42,7 @@ if not st.session_state["is_instructor"]:
     st.markdown(
         """
         <style>
-        /* Sembunyikan toolbar kanan atas (Fork, GitHub, Deploy button, Titik tiga) */
+        /* 1. Sembunyikan Header atas bawaan Streamlit */
         header[data-testid="stHeader"] {
             background-color: transparent !important;
         }
@@ -52,21 +52,34 @@ if not st.session_state["is_instructor"]:
         [data-testid="stDecoration"] {
             display: none !important;
         }
-        /* Sembunyikan footer bawaan Streamlit */
         footer {
             display: none !important;
         }
-        /* Sembunyikan badge profil pembuat & pop-up View profile di kanan bawah */
-        [data-testid="stStatusWidget"],
-        .viewerBadge_container__1QSob,
-        .viewerBadge_link__1S137,
+
+        /* 2. Sembunyikan Badge Profil Bulat Biru & Popover View Profile */
         div[class*="viewerBadge"],
         div[class*="ProfileBadge"],
-        div[data-testid="stActionButton"],
+        div[class*="StatusWidget"],
+        [data-testid="stStatusWidget"],
+        [data-testid="stActionButton"],
+        a[href*="share.streamlit.io/user"],
+        div[data-baseweb="popover"],
+        div[role="tooltip"],
         #MainMenu {
             display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
         }
-        /* Pertahankan tombol panah pembuka sidebar agar tetap bisa login */
+
+        /* Hilangkan container tombol floating kanan bawah */
+        .viewerBadge_container__1QSob,
+        .viewerBadge_link__1S137,
+        div[style*="position: fixed; bottom:"] a[href*="share.streamlit.io"] {
+            display: none !important;
+        }
+
+        /* 3. Pertahankan tombol panah sidebar agar Instruktur tetap bisa login */
         [data-testid="collapsedControl"] {
             display: flex !important;
             z-index: 1000001 !important;
@@ -360,13 +373,11 @@ if menu == "Ujian DG Awareness":
 
                     score = correct_count * 4
                     
-                    # Pecah kode dan nama distrik agar spesifik
                     dist_parts = selected_dist.split(" - ")
                     dist_code = dist_parts[0].strip()
                     dist_name = dist_parts[1].strip() if len(dist_parts) > 1 else ""
                     
                     passed = score >= 80
-
                     clean_phone_str = str(phone).strip()
 
                     if passed:
