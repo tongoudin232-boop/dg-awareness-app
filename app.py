@@ -36,12 +36,13 @@ init_db()
 if "is_instructor" not in st.session_state:
     st.session_state["is_instructor"] = False
 
-# ==================== KONTROL TAMPILAN HEADER & MENU ====================
-# Sembunyikan Fork, GitHub, dan Menu Bawaan untuk Peserta Umum
+# ==================== KONTROL TAMPILAN HEADER, BADGE PROFIL & MENU ====================
+# Sembunyikan Fork, GitHub, Toolbar, dan Badge Profil untuk Peserta Umum
 if not st.session_state["is_instructor"]:
     st.markdown(
         """
         <style>
+        /* Sembunyikan toolbar kanan atas (Fork, GitHub, Deploy button, Titik tiga) */
         header[data-testid="stHeader"] {
             background-color: transparent !important;
         }
@@ -51,9 +52,21 @@ if not st.session_state["is_instructor"]:
         [data-testid="stDecoration"] {
             display: none !important;
         }
+        /* Sembunyikan footer bawaan Streamlit */
         footer {
             display: none !important;
         }
+        /* Sembunyikan badge profil pembuat & pop-up View profile di kanan bawah */
+        [data-testid="stStatusWidget"],
+        .viewerBadge_container__1QSob,
+        .viewerBadge_link__1S137,
+        div[class*="viewerBadge"],
+        div[class*="ProfileBadge"],
+        div[data-testid="stActionButton"],
+        #MainMenu {
+            display: none !important;
+        }
+        /* Pertahankan tombol panah pembuka sidebar agar tetap bisa login */
         [data-testid="collapsedControl"] {
             display: flex !important;
             z-index: 1000001 !important;
@@ -63,6 +76,7 @@ if not st.session_state["is_instructor"]:
         unsafe_allow_html=True
     )
 else:
+    # Tampilkan kembali toolbar untuk Instruktur
     st.markdown(
         """
         <style>
@@ -353,7 +367,6 @@ if menu == "Ujian DG Awareness":
                     
                     passed = score >= 80
 
-                    # Bersihkan format nomor HP dari trailing space
                     clean_phone_str = str(phone).strip()
 
                     if passed:
