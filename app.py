@@ -27,7 +27,8 @@ from materi_module import render_materi_module
 st.set_page_config(
     page_title="DG Awareness Training - SJ & IN",
     layout="wide",
-    page_icon="✈️"
+    page_icon="✈️",
+    initial_sidebar_state="collapsed"
 )
 
 # Inisialisasi Database Google Sheets
@@ -37,14 +38,16 @@ init_db()
 if "is_instructor" not in st.session_state:
     st.session_state["is_instructor"] = False
 
+# Inisialisasi Navigasi Menu Aktif
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "Modul Materi DG Awareness"
+
 # ==================== KONTROL TAMPILAN HEADER, BADGE PROFIL & MENU ====================
 if not st.session_state["is_instructor"]:
     st.markdown(
         """
         <style>
-        header[data-testid="stHeader"] {
-            background-color: transparent !important;
-        }
+        /* Sembunyikan Fork, GitHub, dan Toolbar Kanan Atas */
         [data-testid="stToolbar"] {
             display: none !important;
         }
@@ -70,9 +73,21 @@ if not st.session_state["is_instructor"]:
             opacity: 0 !important;
             pointer-events: none !important;
         }
+        /* Pastikan Tombol Pembuka Sidebar (>>) Selalu Muncul Jelas di HP */
         [data-testid="collapsedControl"] {
             display: flex !important;
-            z-index: 1000001 !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 999999 !important;
+            top: 10px !important;
+            left: 10px !important;
+            background: #0E3B68 !important;
+            color: #ffffff !important;
+            border-radius: 8px !important;
+            padding: 4px !important;
+        }
+        [data-testid="collapsedControl"] svg {
+            fill: #ffffff !important;
         }
         </style>
         """,
@@ -209,7 +224,7 @@ JOB_ROLES = [
 if os.path.exists("logo_sriwijaya.png"):
     st.sidebar.image("logo_sriwijaya.png", use_container_width=True)
 
-st.sidebar.title("Navigasi")
+st.sidebar.title("Navigasi Utama")
 
 if st.session_state["is_instructor"]:
     menu_options = [
@@ -218,18 +233,21 @@ if st.session_state["is_instructor"]:
         "Dashboard Instruktur & Records",
         "Master Distrik & Jadwal Recurrent"
     ]
-    menu = st.sidebar.radio("Navigasi Menu", menu_options)
+    cur_idx = menu_options.index(st.session_state["current_page"]) if st.session_state["current_page"] in menu_options else 0
+    selected_menu = st.sidebar.radio("Navigasi Menu", menu_options, index=cur_idx)
+    st.session_state["current_page"] = selected_menu
     
     st.sidebar.markdown("---")
     if st.sidebar.button("🔒 Logout Instruktur"):
         st.session_state["is_instructor"] = False
+        st.session_state["current_page"] = "Modul Materi DG Awareness"
         st.rerun()
 else:
-    menu_options = [
-        "Modul Materi DG Awareness",
-        "Ujian DG Awareness"
-    ]
-    menu = st.sidebar.radio("Navigasi Menu", menu_options)
+    # Navigasi di sidebar untuk peserta
+    participant_options = ["Modul Materi DG Awareness", "Ujian DG Awareness"]
+    p_idx = participant_options.index(st.session_state["current_page"]) if st.session_state["current_page"] in participant_options else 0
+    selected_p = st.sidebar.radio("Pilih Menu:", participant_options, index=p_idx)
+    st.session_state["current_page"] = selected_p
 
     with st.sidebar.expander("🔐 Akses Khusus Instruktur", expanded=False):
         instructor_pin = st.text_input("Masukkan PIN Instruktur:", type="password")
@@ -241,10 +259,34 @@ else:
             else:
                 st.error("PIN salah!")
 
+# ==================== NAVIGASI RAMAH MOBILE (DI ATAS LAYAR UTAMA) ====================
+# Jika belum login sebagai instruktur, tampilkan tombol tab navigasi langsung di layar agar peserta HP mudah berpindah menu
+if not st.session_state["is_instructor"]:
+    nav_c1, nav_c2 = st.columns(2)
+    with nav_c1:
+        if st.button("📘 Baca Modul Materi", use_container_width=True, type="primary" if st.session_state["current_page"] == "Modul Materi DG Awareness" else "secondary"):
+            st.session_state["current_page"] = "Modul Materi DG Awareness"
+            st.rerun()
+    with nav_c2:
+        if st.button("✍️ Kerjakan Ujian DG", use_container_width=True, type="primary" if st.session_state["current_page"] == "Ujian DG Awareness" else "secondary"):
+            st.session_state["current_page"] = "Ujian DG Awareness"
+            st.rerun()
+    st.markdown("<hr style='margin-top: 5px; margin-bottom: 20px;'>", unsafe_allow_html=True)
+
+menu = st.session_state["current_page"]
+
 
 # ==================== MENU 1: MODUL MATERI DG AWARENESS ====================
 if menu == "Modul Materi DG Awareness":
     render_materi_module()
+    
+    # Tombol shortcut langsung menuju ujian setelah selesai membaca materi
+    st.markdown("---")
+    st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
+    if st.button("🚀 Sudah Memahami Materi? Mulai Ujian DG Sekarang", type="primary", use_container_width=True):
+        st.session_state["current_page"] = "Ujian DG Awareness"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ==================== MENU 2: UJIAN DG AWARENESS ====================
