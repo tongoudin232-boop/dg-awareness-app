@@ -69,6 +69,7 @@ if not st.session_state["is_instructor"]:
             opacity: 0 !important;
             pointer-events: none !important;
         }
+        /* Tombol sidebar terlihat rapi di perangkat HP */
         [data-testid="collapsedControl"] {
             display: flex !important;
             visibility: visible !important;
@@ -252,7 +253,6 @@ else:
             else:
                 st.error("PIN salah!")
 
-# Navigasi cepat di bagian atas untuk ponsel
 if not st.session_state["is_instructor"]:
     nav_c1, nav_c2 = st.columns(2)
     with nav_c1:
@@ -737,6 +737,7 @@ elif menu == "Dashboard Instruktur & Records":
 
                 all_choices = sorted(list(set(master_dist_list + actual_choices)))
                 
+                # Menambahkan opsi global per bandara di bagian atas
                 dist_codes = sorted(p_copy['district'].dropna().unique().tolist())
                 for d_code in dist_codes:
                     all_choices.insert(0, f"{d_code} - (Semua Unit / Perusahaan)")
@@ -749,6 +750,7 @@ elif menu == "Dashboard Instruktur & Records":
                         key="batch_group_select"
                     )
 
+                # ==================== PEMFILTERAN CERDAS & PRESISI ====================
                 g_parts = selected_group.split(" - ", 1)
                 target_dist = g_parts[0].strip()
                 target_name = g_parts[1].strip() if len(g_parts) > 1 else ""
@@ -757,17 +759,22 @@ elif menu == "Dashboard Instruktur & Records":
                     filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
                     group_tag = f"{target_dist}_SEMUA"
                 else:
-                    filtered_candidates = p_copy[
-                        (p_copy['district'] == target_dist) & (
-                            (p_copy.get('district_full', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)) |
-                            (p_copy.get('district_name', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)) |
-                            (p_copy['company'].astype(str).str.contains(target_name, case=False, na=False))
-                        )
-                    ].copy()
+                    df_dist_only = p_copy[p_copy['district'] == target_dist].copy()
+                    
+                    match_mask = (
+                        df_dist_only.get('district_full', pd.Series()).astype(str).str.contains(target_name, case=False, na=False) |
+                        df_dist_only.get('district_name', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)
+                    )
+                    
+                    name_upper = target_name.upper()
+                    if "IAS" in name_upper:
+                        match_mask = match_mask | df_dist_only['company'].astype(str).str.contains("IAS|INTEGRASI", case=False, na=False)
+                    elif "GH" in name_upper or "INTERNAL" in name_upper:
+                        match_mask = match_mask | df_dist_only['company'].astype(str).str.contains("MALINDO|GAS|GAA|SRIWIJAYA|NAM", case=False, na=False)
+                    else:
+                        match_mask = match_mask | df_dist_only['company'].astype(str).str.contains(target_name, case=False, na=False)
 
-                    if filtered_candidates.empty:
-                        filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
-
+                    filtered_candidates = df_dist_only[match_mask].copy()
                     clean_tag_name = target_name.replace(' ', '_').replace('&', 'dan').replace('/', '_')
                     group_tag = f"{target_dist}_{clean_tag_name}"
 
