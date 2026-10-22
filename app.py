@@ -47,7 +47,6 @@ if not st.session_state["is_instructor"]:
     st.markdown(
         """
         <style>
-        /* Sembunyikan Fork, GitHub, dan Toolbar Kanan Atas */
         [data-testid="stToolbar"] {
             display: none !important;
         }
@@ -73,7 +72,7 @@ if not st.session_state["is_instructor"]:
             opacity: 0 !important;
             pointer-events: none !important;
         }
-        /* Pastikan Tombol Pembuka Sidebar (>>) Selalu Muncul Jelas di HP */
+        /* Tombol pembuka sidebar tetap terlihat di layar HP */
         [data-testid="collapsedControl"] {
             display: flex !important;
             visibility: visible !important;
@@ -120,10 +119,10 @@ query_params = st.query_params
 
 if "cert" in query_params:
     cert_query = str(query_params["cert"]).strip()
-    
+
     records_df = get_training_records()
     matched = pd.DataFrame()
-    
+
     if not records_df.empty:
         def clean_cert_val(val):
             if pd.isna(val) or val is None:
@@ -141,7 +140,7 @@ if "cert" in query_params:
             (df_check['clean_sj'] == cert_query) | 
             (df_check['clean_in'] == cert_query)
         ]
-    
+
     col_vlogo1, col_vtitle, col_vlogo2 = st.columns([1.5, 5, 1.5])
     with col_vlogo1:
         if os.path.exists("logo_sriwijaya.png"):
@@ -161,11 +160,11 @@ if "cert" in query_params:
             st.image("logo_namair.png", use_container_width=True)
 
     st.markdown("<hr style='border: 1px solid #E0E0E0;'>", unsafe_allow_html=True)
-    
+
     if not matched.empty:
         rec = matched.iloc[0]
         st.success("✅ **SERTIFIKAT RESMI TERVERIFIKASI & TERCATAT DI DATABASE (VALID)**")
-        
+
         col_v1, col_v2 = st.columns(2)
         with col_v1:
             st.markdown(f"**Nama Peserta:** {rec['full_name']}")
@@ -177,10 +176,10 @@ if "cert" in query_params:
             st.markdown(f"**Tanggal Training:** {rec['training_date']}")
             st.markdown(f"**No. Sertifikat Sriwijaya Air:** `{rec['cert_no_sj']}`")
             st.markdown(f"**No. Sertifikat NAM Air:** `{rec['cert_no_in']}`")
-        
+
         st.markdown("---")
         st.subheader("Salinan Resmi Dokumen")
-        
+
         clean_sj_val = clean_cert_val(rec['cert_no_sj'])
         airline_target = "SJ" if clean_sj_val == cert_query else "IN"
         airline_name = "Sriwijaya Air" if airline_target == "SJ" else "NAM Air"
@@ -200,11 +199,11 @@ if "cert" in query_params:
             )
         except Exception as e:
             st.error(f"Gagal memuat salinan sertifikat: {e}")
-            
+
     else:
         st.error("❌ **DATA SERTIFIKAT TIDAK DITEMUKAN!**")
         st.warning(f"Nomor sertifikat '{cert_query}' tidak terdaftar pada sistem database pelatihan resmi Sriwijaya Air & NAM Air Cargo.")
-        
+
     st.stop()
 
 
@@ -236,14 +235,13 @@ if st.session_state["is_instructor"]:
     cur_idx = menu_options.index(st.session_state["current_page"]) if st.session_state["current_page"] in menu_options else 0
     selected_menu = st.sidebar.radio("Navigasi Menu", menu_options, index=cur_idx)
     st.session_state["current_page"] = selected_menu
-    
+
     st.sidebar.markdown("---")
     if st.sidebar.button("🔒 Logout Instruktur"):
         st.session_state["is_instructor"] = False
         st.session_state["current_page"] = "Modul Materi DG Awareness"
         st.rerun()
 else:
-    # Navigasi di sidebar untuk peserta
     participant_options = ["Modul Materi DG Awareness", "Ujian DG Awareness"]
     p_idx = participant_options.index(st.session_state["current_page"]) if st.session_state["current_page"] in participant_options else 0
     selected_p = st.sidebar.radio("Pilih Menu:", participant_options, index=p_idx)
@@ -259,8 +257,7 @@ else:
             else:
                 st.error("PIN salah!")
 
-# ==================== NAVIGASI RAMAH MOBILE (DI ATAS LAYAR UTAMA) ====================
-# Jika belum login sebagai instruktur, tampilkan tombol tab navigasi langsung di layar agar peserta HP mudah berpindah menu
+# Navigasi cepat langsung di bagian atas layar untuk pengguna HP
 if not st.session_state["is_instructor"]:
     nav_c1, nav_c2 = st.columns(2)
     with nav_c1:
@@ -279,8 +276,7 @@ menu = st.session_state["current_page"]
 # ==================== MENU 1: MODUL MATERI DG AWARENESS ====================
 if menu == "Modul Materi DG Awareness":
     render_materi_module()
-    
-    # Tombol shortcut langsung menuju ujian setelah selesai membaca materi
+
     st.markdown("---")
     st.markdown("<div style='text-align: center;'>", unsafe_allow_html=True)
     if st.button("🚀 Sudah Memahami Materi? Mulai Ujian DG Sekarang", type="primary", use_container_width=True):
@@ -323,7 +319,6 @@ elif menu == "Ujian DG Awareness":
         - Peserta yang lulus langsung memperoleh **2 Sertifikat Resmi** (Sriwijaya Air & NAM Air).
         """)
 
-    # Tampilan hasil & penguncian form jika sudah disubmit
     if 'exam_result' in st.session_state:
         res = st.session_state['exam_result']
         if res['passed']:
@@ -363,23 +358,37 @@ elif menu == "Ujian DG Awareness":
             full_name = st.text_input("Nama Lengkap*")
             nik = st.text_input("NIK / Employee ID*")
             phone = st.text_input("No. Handphone / WhatsApp*")
-            job_role_selected = st.selectbox("Jabatan / Unit Kerja*", JOB_ROLES)
-            
+
+            # Default kosong dengan placeholder bertanda panah dropdown
+            job_role_selected = st.selectbox(
+                "Jabatan / Unit Kerja*",
+                options=JOB_ROLES,
+                index=None,
+                placeholder="-- Pilih Jabatan / Unit Kerja --"
+            )
+
             if job_role_selected == "Lainnya":
                 custom_role = st.text_input("Sebutkan Jabatan / Unit Kerja Anda*")
                 job_role = custom_role.strip()
             else:
-                job_role = job_role_selected
+                job_role = job_role_selected if job_role_selected else ""
 
         with col2:
             company = st.text_input("Perusahaan*")
             dist_df = get_districts()
-            dist_options = dist_df['code'] + " - " + dist_df['name'] if not dist_df.empty else []
-            selected_dist = st.selectbox("Distrik Penugasan*", dist_options)
+            dist_options = (dist_df['code'] + " - " + dist_df['name']).tolist() if not dist_df.empty else []
+
+            # Default kosong dengan placeholder bertanda panah dropdown
+            selected_dist = st.selectbox(
+                "Distrik Penugasan*",
+                options=dist_options,
+                index=None,
+                placeholder="-- Pilih Distrik Penugasan --"
+            )
             training_date = st.date_input("Tanggal Pelaksanaan Training", date.today(), format="DD/MM/YYYY")
 
         st.subheader("2. Lembar Soal Ujian (25 Soal)")
-        
+
         with st.form("exam_form"):
             user_answers = {}
             for i, q in enumerate(QUESTIONS):
@@ -396,7 +405,7 @@ elif menu == "Ujian DG Awareness":
 
         if submit_btn:
             if not full_name or not nik or not phone or not company or not selected_dist or not job_role:
-                st.error("Mohon lengkapi seluruh kolom Data Diri Peserta (termasuk No. Handphone) sebelum submit!")
+                st.error("Mohon lengkapi seluruh kolom Data Diri Peserta (termasuk Distrik dan Jabatan) sebelum submit!")
             elif any(user_answers[i] is None for i in range(len(QUESTIONS))):
                 st.warning("Pastikan seluruh 25 soal telah dijawab!")
             else:
@@ -409,16 +418,16 @@ elif menu == "Ujian DG Awareness":
                             correct_val = q['options'][raw_ans]
                         else:
                             correct_val = str(raw_ans)
-                        
+
                         if str(selected_val).strip().lower() == str(correct_val).strip().lower():
                             correct_count += 1
 
                     score = correct_count * 4
-                    
+
                     dist_parts = selected_dist.split(" - ")
                     dist_code = dist_parts[0].strip()
                     dist_name = dist_parts[1].strip() if len(dist_parts) > 1 else ""
-                    
+
                     passed = score >= 80
                     clean_phone_str = str(phone).strip()
 
@@ -442,7 +451,10 @@ elif menu == "Ujian DG Awareness":
                             'cert_no_in': cert_no_in,
                             'expiry_date': exp_date
                         }
-                        save_training_record(record_payload)
+                        saved = save_training_record(record_payload)
+
+                        if not saved:
+                            st.warning("Data Anda sudah tercatat sebelumnya. Menampilkan sertifikat yang telah diterbitkan...")
 
                         pdf_sj = generate_certificate(
                             airline="SJ",
@@ -498,11 +510,11 @@ elif menu == "Dashboard Instruktur & Records":
     with st.expander("⚙️ **Pengaturan Khusus & Reset Data Percobaan (Trial)**", expanded=False):
         c_tool1, c_tool2 = st.columns(2)
         with c_tool1:
-            st.markdown("**1. Reset Nomor Sertifikat ke Urutan 0001**")
-            st.caption("Memulai ulang penomoran sertifikat resmi SJ & IN dari nomor urut 0001 di cloud.")
-            if st.button("🔄 Reset Nomor Sertifikat ke 1", type="primary"):
+            st.markdown("**1. Sinkronisasi & Refresh Cache Database**")
+            st.caption("Membersihkan cache internal agar data Google Sheets termutakhir langsung terbaca.")
+            if st.button("🔄 Refresh Data Cache", type="primary"):
                 reset_cert_sequence()
-                st.success("✅ Nomor sertifikat berhasil di-reset! Sertifikat berikutnya akan terbit dari nomor urut 0001.")
+                st.success("✅ Cache berhasil dibersihkan!")
                 st.rerun()
 
         with c_tool2:
@@ -700,7 +712,7 @@ elif menu == "Dashboard Instruktur & Records":
         # Unduh Ulang Sertifikat
         st.markdown("---")
         st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
-        
+
         passed_records = records_df[
             (records_df['status'] == 'LULUS') & 
             (records_df['cert_no_sj'] != '-') & 
@@ -789,7 +801,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         except Exception:
             return "Format Tanggal Salah"
 
-    # Pusat Edit Manual Data Distrik
     with st.expander("✏️ **Pusat Edit Manual Data Distrik & Jadwal Recurrent**", expanded=True):
         if not dist_df.empty:
             dist_map = {}
@@ -881,7 +892,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
 
     if not dist_df.empty:
         df_display = dist_df.copy()
-        
+
         def format_date_display(d_str):
             if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']:
                 return "-"
@@ -921,7 +932,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             new_name = st.text_input("Nama Kota / Bandara (misal: Banjarmasin)")
         with c3:
             new_cat = st.selectbox("Kategori", CATEGORY_OPTIONS)
-        
+
         btn_add = st.form_submit_button("Simpan Distrik Baru ke Google Sheets")
         if btn_add:
             if new_code and new_name:

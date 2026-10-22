@@ -18,11 +18,11 @@ from reportlab.lib.units import cm
 def generate_attendance_pdf(airline, date_display, time_str, venue_str, instructor_name, df_session, photo_bytes=None):
     """
     Menghasilkan dokumen PDF Daftar Kehadiran (Absensi) resmi multi-halaman dinamis.
-    Mendukung berapapun jumlah peserta (25, 28, 50, dst.) tanpa memotong baris.
+    Foto dokumentasi training diletakkan di atas, diikuti tanda tangan instruktur di bawahnya (sisi kanan).
     """
     buffer = io.BytesIO()
     
-    # Margin dokumen A4
+    # Margin dokumen standar A4
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
@@ -35,14 +35,14 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
     story = []
     styles = getSampleStyleSheet()
 
-    # Style Kustom
+    # Style Definisi Teks
     title_style = ParagraphStyle(
         'AttTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
         fontSize=13,
         leading=16,
-        alignment=1, # Center
+        alignment=1, # Rata Tengah
         textColor=colors.HexColor('#000000')
     )
     
@@ -70,7 +70,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         fontName='Helvetica',
         fontSize=8,
         leading=10,
-        alignment=0
+        alignment=0 # Rata Kiri
     )
     
     cell_center_style = ParagraphStyle(
@@ -79,7 +79,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         fontName='Helvetica',
         fontSize=8,
         leading=10,
-        alignment=1
+        alignment=1 # Rata Tengah
     )
     
     cell_header_style = ParagraphStyle(
@@ -88,16 +88,14 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         fontName='Helvetica-Bold',
         fontSize=8.5,
         leading=11,
-        alignment=1,
+        alignment=1, # Rata Tengah
         textColor=colors.HexColor('#000000')
     )
 
     # ==================== 1. HEADER LOGO & JUDUL ====================
     logo_filename = "logo_sriwijaya.png" if airline == "SJ" else "logo_namair.png"
-    logo_flowable = ""
     if os.path.exists(logo_filename):
         try:
-            # Proporsi logo di header kiri
             logo_flowable = RLImage(logo_filename, width=4.5 * cm, height=1.6 * cm)
         except Exception:
             logo_flowable = Paragraph(f"<b>{airline}</b>", title_style)
@@ -141,7 +139,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
     story.append(meta_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    # ==================== 3. TABEL DAFTAR PESERTA (LENGKAP 100%) ====================
+    # ==================== 3. TABEL DAFTAR PESERTA ====================
     table_content = [
         [
             Paragraph("NO", cell_header_style),
@@ -152,13 +150,11 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         ]
     ]
 
-    # Iterasi SELURUH peserta di df_session tanpa pemotongan / limitasi
     df_sorted = df_session.reset_index(drop=True)
     for idx, row in df_sorted.iterrows():
         no_str = str(idx + 1)
         name_str = str(row.get('full_name', '')).strip().upper()
         
-        # Bersihkan format desimal .0 pada nomor handphone
         raw_phone = str(row.get('phone', '')).strip()
         if raw_phone.endswith('.0'):
             raw_phone = raw_phone[:-2]
@@ -175,9 +171,9 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
             Paragraph(comp_str, cell_style)
         ])
 
-    # Total lebar halaman: 17.5 cm (A4 width 21 cm - margin 3.5 cm)
-    # repeatRows=1 memastikan baris header 'NO, Nama, ...' otomatis terulang di halaman berikutnya jika baris > 25
+    # Lebar kolom tabel total 17.5 cm (pas dengan printable area A4)
     col_widths = [1.0 * cm, 5.0 * cm, 3.5 * cm, 4.0 * cm, 4.0 * cm]
+    # repeatRows=1 membuat baris judul tabel otomatis muncul kembali di halaman kedua dst.
     participants_table = Table(table_content, colWidths=col_widths, repeatRows=1)
     
     participants_table.setStyle(TableStyle([
@@ -194,16 +190,15 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
     story.append(participants_table)
     story.append(Spacer(1, 0.6 * cm))
 
-    # ==================== 4. BUKTI FOTO & TANDA TANGAN INSTRUKTUR ====================
-    # KeepTogether membungkus elemen ini agar tidak terpisah canggung di batas halaman
+    # ==================== 4. DOKUMENTASI & TANDA TANGAN (VERTIKAL) ====================
     closing_elements = []
 
     doc_label_style = ParagraphStyle(
         'DocLabel',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=9,
-        leading=12,
+        fontSize=9.5,
+        leading=13,
         textColor=colors.HexColor('#000000')
     )
     
@@ -213,7 +208,7 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         fontName='Helvetica',
         fontSize=9,
         leading=12,
-        alignment=1, # Center
+        alignment=1, # Rata Tengah
         textColor=colors.HexColor('#000000')
     )
     
@@ -223,20 +218,26 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         fontName='Helvetica-Bold',
         fontSize=9.5,
         leading=13,
-        alignment=1, # Center
+        alignment=1, # Rata Tengah
         textColor=colors.HexColor('#000000')
     )
 
-    # Persiapan foto bukti dokumentasi
-    photo_flowable = Paragraph("<i>(Tidak ada lampiran foto)</i>", meta_val_style)
+    # 1. Judul & Foto Dokumentasi Training di Bagian Atas
+    closing_elements.append(Paragraph("<b>Dokumentasi Training:</b>", doc_label_style))
+    closing_elements.append(Spacer(1, 0.25 * cm))
+
     if photo_bytes:
         try:
             img_io = io.BytesIO(photo_bytes)
-            photo_flowable = RLImage(img_io, width=8.5 * cm, height=4.8 * cm)
+            closing_elements.append(RLImage(img_io, width=10.5 * cm, height=5.8 * cm))
         except Exception:
-            photo_flowable = Paragraph("<i>(Gagal memuat gambar)</i>", meta_val_style)
+            closing_elements.append(Paragraph("<i>(Gagal memuat gambar)</i>", meta_val_style))
+    else:
+        closing_elements.append(Paragraph("<i>(Tidak ada lampiran foto kegiatan)</i>", meta_val_style))
 
-    # Persiapan Tanda Tangan
+    closing_elements.append(Spacer(1, 0.6 * cm))
+
+    # 2. Tanda Tangan Instruktur di Bawah Foto (Sejajar Kanan)
     ttd_flowable = Spacer(1, 1.8 * cm)
     if os.path.exists("ttd_instruktur.png"):
         try:
@@ -252,31 +253,21 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
         Paragraph(f"<b><u>{instructor_name.upper()}</u></b>", inst_name_style)
     ]
 
-    closing_table_data = [
-        [
-            Paragraph("<b>Dokumentasi Training:</b>", doc_label_style),
-            ""
-        ],
-        [
-            photo_flowable,
-            instruktur_box
-        ]
-    ]
-
-    closing_table = Table(closing_table_data, colWidths=[10.5 * cm, 7.0 * cm])
-    closing_table.setStyle(TableStyle([
+    # Menggunakan tabel 2 kolom: kolom kiri kosong (10.5 cm) agar kotak ttd (7.0 cm) berada rapi di sisi kanan
+    ttd_table = Table([["", instruktur_box]], colWidths=[10.5 * cm, 7.0 * cm])
+    ttd_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('ALIGN', (1, 1), (1, 1), 'CENTER'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
+    closing_elements.append(ttd_table)
 
-    closing_elements.append(closing_table)
+    # KeepTogether menjaga agar foto dan blok ttd tidak terpisah canggung di ujung halaman
     story.append(KeepTogether(closing_elements))
 
-    # Bangun Dokumen PDF
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
@@ -284,13 +275,13 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
 
 def generate_attendance_excel(date_display, time_str, venue_str, instructor_name, df_session):
     """
-    Menghasilkan file spreadsheet Excel (.xlsx) untuk absensi resmi seluruh peserta.
+    Menghasilkan file Excel (.xlsx) untuk data absensi seluruh peserta tanpa batasan baris.
     """
     output = io.BytesIO()
-    
+
     excel_rows = []
     df_sorted = df_session.reset_index(drop=True)
-    
+
     for idx, row in df_sorted.iterrows():
         raw_phone = str(row.get('phone', '')).strip()
         if raw_phone.endswith('.0'):
@@ -310,8 +301,7 @@ def generate_attendance_excel(date_display, time_str, venue_str, instructor_name
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_export.to_excel(writer, index=False, sheet_name='Daftar_Hadir')
         ws = writer.sheets['Daftar_Hadir']
-        
-        # Penyesuaian lebar kolom otomatis
+
         col_widths = {'A': 6, 'B': 30, 'C': 18, 'D': 25, 'E': 25}
         for col_letter, width in col_widths.items():
             ws.column_dimensions[col_letter].width = width
