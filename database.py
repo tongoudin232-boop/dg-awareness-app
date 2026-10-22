@@ -8,33 +8,11 @@ def get_connection():
     return st.connection("gsheets", type=GSheetsConnection)
 
 def init_db():
-    """Inisialisasi awal struktur tabel di Google Sheets jika belum tersedia"""
-    conn = get_connection()
-    try:
-        df_districts = conn.read(worksheet="districts", ttl=0)
-    except Exception:
-        df_districts = pd.DataFrame()
-
-    if df_districts is None or df_districts.empty:
-        initial_districts = pd.DataFrame([
-            {"id": 1, "code": "CGK", "name": "Jakarta (Soekarno-Hatta)", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
-            {"id": 2, "code": "SUB", "name": "Surabaya (Juanda)", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
-            {"id": 3, "code": "BTH", "name": "Batam (Hang Nadim)", "category": "NAM Air", "last_training_date": "", "next_due_date": ""}
-        ])
-        conn.update(worksheet="districts", data=initial_districts)
-
-    try:
-        df_records = conn.read(worksheet="training_records", ttl=0)
-    except Exception:
-        df_records = pd.DataFrame()
-
-    if df_records is None or df_records.empty:
-        empty_records = pd.DataFrame(columns=[
-            "id", "training_date", "full_name", "nik", "phone",
-            "job_role", "company", "district", "district_full", "score", "status",
-            "cert_no_sj", "cert_no_in", "expiry_date"
-        ])
-        conn.update(worksheet="training_records", data=empty_records)
+    """
+    Inisialisasi pasif.
+    Tidak memaksa conn.update() agar tidak memicu error gspread API saat startup.
+    """
+    pass
 
 
 def get_districts():
@@ -210,7 +188,7 @@ def delete_training_record(record_id):
 
 
 def reset_cert_sequence():
-    """Fungsi pembantu kompatibilitas reset cache penomoran"""
+    """Membersihkan cache data agar data terbaru langsung terbaca"""
     st.cache_data.clear()
 
 

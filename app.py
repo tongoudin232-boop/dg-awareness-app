@@ -7,7 +7,6 @@ import os
 import zipfile
 
 from database import (
-    init_db,
     save_training_record,
     get_districts,
     add_district,
@@ -32,9 +31,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Inisialisasi Database Google Sheets
-init_db()
-
 # Inisialisasi Session State Login Instruktur
 if "is_instructor" not in st.session_state:
     st.session_state["is_instructor"] = False
@@ -43,7 +39,7 @@ if "is_instructor" not in st.session_state:
 if "current_page" not in st.session_state:
     st.session_state["current_page"] = "Modul Materi DG Awareness"
 
-# ==================== KONTROL TAMPILAN HEADER, BADGE PROFIL & MENU ====================
+# ==================== KONTROL TAMPILAN HEADER & MOBILE ====================
 if not st.session_state["is_instructor"]:
     st.markdown(
         """
@@ -73,7 +69,6 @@ if not st.session_state["is_instructor"]:
             opacity: 0 !important;
             pointer-events: none !important;
         }
-        /* Tombol pembuka sidebar tetap terlihat jelas di HP */
         [data-testid="collapsedControl"] {
             display: flex !important;
             visibility: visible !important;
@@ -105,7 +100,6 @@ else:
         unsafe_allow_html=True
     )
 
-# Daftar Kategori Lengkap Distrik
 CATEGORY_OPTIONS = [
     "Sriwijaya Air",
     "NAM Air",
@@ -258,7 +252,7 @@ else:
             else:
                 st.error("PIN salah!")
 
-# Navigasi atas cepat untuk peserta di layar HP
+# Navigasi cepat di bagian atas untuk ponsel
 if not st.session_state["is_instructor"]:
     nav_c1, nav_c2 = st.columns(2)
     with nav_c1:
@@ -378,7 +372,6 @@ elif menu == "Ujian DG Awareness":
             dist_df = get_districts()
             dist_options = (dist_df['code'] + " - " + dist_df['name']).tolist() if not dist_df.empty else []
 
-            # Dasar pilihan Distrik Penugasan dari master distrik
             selected_dist = st.selectbox(
                 "Distrik Penugasan*",
                 options=dist_options,
@@ -445,7 +438,7 @@ elif menu == "Ujian DG Awareness":
                             'company': company.strip(),
                             'district': dist_code,
                             'district_name': dist_name,
-                            'district_full': selected_dist, # Menyimpan pilihan distrik lengkap
+                            'district_full': selected_dist,
                             'score': score,
                             'status': 'LULUS',
                             'cert_no_sj': cert_no_sj,
@@ -509,7 +502,7 @@ elif menu == "Ujian DG Awareness":
 elif menu == "Dashboard Instruktur & Records":
     st.title("📊 Training Records & Audit Report (Google Sheets Cloud)")
 
-    with st.expander("⚙️ **Pengaturan Khusus & Reset Data Percobaan (Trial)**", expanded=False):
+    with st.expander("⚙️ **Pengaturan Khusus & Refresh Data Cache**", expanded=False):
         c_tool1, c_tool2 = st.columns(2)
         with c_tool1:
             st.markdown("**1. Sinkronisasi & Refresh Cache Database**")
@@ -731,24 +724,19 @@ elif menu == "Dashboard Instruktur & Records":
             # ---------------- TAB 1: BATCH UNDUH BERDASARKAN DISTRIK PENUGASAN ----------------
             with tab_cert1:
                 st.markdown("##### 📁 Download Sertifikat Sesuai Distrik Penugasan")
-                st.caption("Pilihan di bawah ini merujuk langsung pada nama unit di Master Distrik Penugasan (misal: BTH - GH & Internal, BTH - WH IAS, dll.).")
+                st.caption("Pilihan merujuk langsung pada nama unit di Master Distrik Penugasan (misal: BTH - WH IAS, BTH - GH & Internal, dll.).")
 
                 p_copy = passed_records.copy()
-                
-                # Mengambil daftar pilihan yang terdaftar di database peserta
                 dist_df_master = get_districts()
                 master_dist_list = (dist_df_master['code'] + " - " + dist_df_master['name']).tolist() if not dist_df_master.empty else []
 
-                # Cek kolom district_full jika ada, atau buat kombinasi district + company
                 if 'district_full' in p_copy.columns:
                     actual_choices = p_copy['district_full'].dropna().unique().tolist()
                 else:
                     actual_choices = []
 
-                # Gabungkan opsi yang tersedia agar komprehensif
                 all_choices = sorted(list(set(master_dist_list + actual_choices)))
                 
-                # Tambahkan opsi global per kode bandara (misal BTH - Semua Unit)
                 dist_codes = sorted(p_copy['district'].dropna().unique().tolist())
                 for d_code in dist_codes:
                     all_choices.insert(0, f"{d_code} - (Semua Unit / Perusahaan)")
@@ -761,7 +749,6 @@ elif menu == "Dashboard Instruktur & Records":
                         key="batch_group_select"
                     )
 
-                # Logika pemfilteran peserta
                 g_parts = selected_group.split(" - ", 1)
                 target_dist = g_parts[0].strip()
                 target_name = g_parts[1].strip() if len(g_parts) > 1 else ""
@@ -770,7 +757,6 @@ elif menu == "Dashboard Instruktur & Records":
                     filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
                     group_tag = f"{target_dist}_SEMUA"
                 else:
-                    # Filter berdasarkan kecocokan di district_full, nama distrik, atau nama perusahaan
                     filtered_candidates = p_copy[
                         (p_copy['district'] == target_dist) & (
                             (p_copy.get('district_full', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)) |
@@ -778,11 +764,10 @@ elif menu == "Dashboard Instruktur & Records":
                             (p_copy['company'].astype(str).str.contains(target_name, case=False, na=False))
                         )
                     ].copy()
-                    
-                    # Jika peserta lama belum memiliki district_full dan company sedikit berbeda, tetap ambil berdasarkan target_dist jika hasil kosong
+
                     if filtered_candidates.empty:
                         filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
-                    
+
                     clean_tag_name = target_name.replace(' ', '_').replace('&', 'dan').replace('/', '_')
                     group_tag = f"{target_dist}_{clean_tag_name}"
 
@@ -804,7 +789,6 @@ elif menu == "Dashboard Instruktur & Records":
                 if not batch_candidates.empty:
                     c_zip1, c_zip2, c_zip3 = st.columns(3)
 
-                    # 1. Download Batch Sriwijaya Air (SJ)
                     with c_zip1:
                         if st.button("📦 Siapkan ZIP Sertifikat SJ", use_container_width=True, key="btn_prep_zip_sj"):
                             with st.spinner("Mengompilasi sertifikat Sriwijaya Air..."):
@@ -835,7 +819,6 @@ elif menu == "Dashboard Instruktur & Records":
                                 key="dl_zip_sj"
                             )
 
-                    # 2. Download Batch NAM Air (IN)
                     with c_zip2:
                         if st.button("📦 Siapkan ZIP Sertifikat IN", use_container_width=True, key="btn_prep_zip_in"):
                             with st.spinner("Mengompilasi sertifikat NAM Air..."):
@@ -866,7 +849,6 @@ elif menu == "Dashboard Instruktur & Records":
                                 key="dl_zip_in"
                             )
 
-                    # 3. Download Batch Gabungan Lengkap (SJ + IN)
                     with c_zip3:
                         if st.button("📦 Siapkan ZIP Lengkap (SJ + IN)", use_container_width=True, key="btn_prep_zip_all"):
                             with st.spinner("Mengompilasi seluruh sertifikat SJ & IN..."):
