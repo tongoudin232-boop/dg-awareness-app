@@ -1,183 +1,282 @@
 import io
 import os
 import pandas as pd
-from PIL import Image as PILImage
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
-)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
+    Image as RLImage,
+    KeepTogether
+)
 from reportlab.lib.units import cm
 
 def generate_attendance_pdf(airline, date_display, time_str, venue_str, instructor_name, df_session, photo_bytes=None):
     """
-    Menghasilkan dokumen PDF Daftar Kehadiran resmi Sriwijaya Air / NAM Air
-    lengkap dengan tanda tangan instruktur dan gambar dokumentasi.
+    Menghasilkan dokumen PDF Daftar Kehadiran (Absensi) resmi multi-halaman dinamis.
+    Mendukung berapapun jumlah peserta (25, 28, 50, dst.) tanpa memotong baris.
     """
-    # 1. Pastikan peserta unik (tidak ada duplikat berdasarkan NIK)
-    df_clean = df_session.drop_duplicates(subset=['nik']).reset_index(drop=True)
-
     buffer = io.BytesIO()
+    
+    # Margin dokumen A4
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=1.5*cm,
-        rightMargin=1.5*cm,
-        topMargin=1.5*cm,
-        bottomMargin=1.5*cm
+        leftMargin=1.5 * cm,
+        rightMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm
     )
     
     story = []
     styles = getSampleStyleSheet()
-    
-    style_title = ParagraphStyle(
-        'TitleStyle',
+
+    # Style Kustom
+    title_style = ParagraphStyle(
+        'AttTitle',
+        parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=12,
-        leading=15,
-        alignment=1
+        fontSize=13,
+        leading=16,
+        alignment=1, # Center
+        textColor=colors.HexColor('#000000')
     )
-    style_info = ParagraphStyle(
-        'InfoStyle',
+    
+    meta_label_style = ParagraphStyle(
+        'MetaLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#000000')
+    )
+    
+    meta_val_style = ParagraphStyle(
+        'MetaVal',
+        parent=styles['Normal'],
         fontName='Helvetica',
         fontSize=9,
-        leading=12
+        leading=12,
+        textColor=colors.HexColor('#000000')
     )
-    style_cell = ParagraphStyle(
+    
+    cell_style = ParagraphStyle(
         'CellText',
+        parent=styles['Normal'],
         fontName='Helvetica',
         fontSize=8,
-        leading=10
+        leading=10,
+        alignment=0
     )
-    style_cell_header = ParagraphStyle(
-        'CellHeader',
-        fontName='Helvetica-Bold',
+    
+    cell_center_style = ParagraphStyle(
+        'CellCenter',
+        parent=styles['Normal'],
+        fontName='Helvetica',
         fontSize=8,
         leading=10,
         alignment=1
     )
-    style_sign_name = ParagraphStyle(
-        'SignName',
+    
+    cell_header_style = ParagraphStyle(
+        'CellHeader',
+        parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=9,
-        leading=12,
-        alignment=1
-    )
-    style_sign_title = ParagraphStyle(
-        'SignTitle',
-        fontName='Helvetica',
-        fontSize=9,
-        leading=12,
-        alignment=1
+        fontSize=8.5,
+        leading=11,
+        alignment=1,
+        textColor=colors.HexColor('#000000')
     )
 
-    # 1. Header Logo & Judul
+    # ==================== 1. HEADER LOGO & JUDUL ====================
     logo_filename = "logo_sriwijaya.png" if airline == "SJ" else "logo_namair.png"
     logo_flowable = ""
     if os.path.exists(logo_filename):
-        logo_flowable = RLImage(logo_filename, width=3.5*cm, height=1.5*cm)
+        try:
+            # Proporsi logo di header kiri
+            logo_flowable = RLImage(logo_filename, width=4.5 * cm, height=1.6 * cm)
+        except Exception:
+            logo_flowable = Paragraph(f"<b>{airline}</b>", title_style)
+    else:
+        logo_flowable = Paragraph(f"<b>{airline}</b>", title_style)
 
-    title_text = "<b>DAFTAR KEHADIRAN<br/>DANGEROUS GOODS AWARENESS</b>"
-    header_table_data = [[logo_flowable, Paragraph(title_text, style_title)]]
-    
-    header_table = Table(header_table_data, colWidths=[4*cm, 14*cm])
+    header_text = """
+    <b>DAFTAR KEHADIRAN</b><br/>
+    <b>DANGEROUS GOODS AWARENESS</b>
+    """
+    header_para = Paragraph(header_text, title_style)
+
+    header_table = Table(
+        [[logo_flowable, header_para]],
+        colWidths=[5.5 * cm, 12.0 * cm]
+    )
     header_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('ALIGN', (1,0), (1,0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
     ]))
     story.append(header_table)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(Spacer(1, 0.6 * cm))
 
-    # 2. Metadata Training
-    info_data = [
-        [Paragraph("<b>Hari / Tanggal</b>", style_info), Paragraph(f": {date_display}", style_info)],
-        [Paragraph("<b>Pukul</b>", style_info), Paragraph(f": {time_str}", style_info)],
-        [Paragraph("<b>Tempat</b>", style_info), Paragraph(f": {venue_str}", style_info)],
+    # ==================== 2. METADATA TRAINING ====================
+    meta_data = [
+        [Paragraph("Hari / Tanggal", meta_label_style), Paragraph(f": {date_display}", meta_val_style)],
+        [Paragraph("Pukul", meta_label_style), Paragraph(f": {time_str}", meta_val_style)],
+        [Paragraph("Tempat", meta_label_style), Paragraph(f": {venue_str}", meta_val_style)]
     ]
-    info_table = Table(info_data, colWidths=[3.2*cm, 14.8*cm])
-    info_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('TOPPADDING', (0,0), (-1,-1), 1),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+    meta_table = Table(meta_data, colWidths=[3.2 * cm, 14.3 * cm])
+    meta_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
-    story.append(info_table)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(meta_table)
+    story.append(Spacer(1, 0.4 * cm))
 
-    # 3. Tabel Peserta
-    table_rows = [
+    # ==================== 3. TABEL DAFTAR PESERTA (LENGKAP 100%) ====================
+    table_content = [
         [
-            Paragraph("<b>NO</b>", style_cell_header),
-            Paragraph("<b>Nama</b>", style_cell_header),
-            Paragraph("<b>No. Handphone</b>", style_cell_header),
-            Paragraph("<b>Jabatan</b>", style_cell_header),
-            Paragraph("<b>Instansi / Perusahaan</b>", style_cell_header)
+            Paragraph("NO", cell_header_style),
+            Paragraph("Nama", cell_header_style),
+            Paragraph("No. Handphone", cell_header_style),
+            Paragraph("Jabatan", cell_header_style),
+            Paragraph("Instansi / Perusahaan", cell_header_style)
         ]
     ]
 
-    for idx, row in df_clean.iterrows():
-        table_rows.append([
-            Paragraph(str(idx + 1), style_cell_header),
-            Paragraph(str(row.get('full_name', '')).upper(), style_cell),
-            Paragraph(str(row.get('phone', '-')), style_cell),
-            Paragraph(str(row.get('job_role', '')), style_cell),
-            Paragraph(str(row.get('company', '')).upper(), style_cell)
+    # Iterasi SELURUH peserta di df_session tanpa pemotongan / limitasi
+    df_sorted = df_session.reset_index(drop=True)
+    for idx, row in df_sorted.iterrows():
+        no_str = str(idx + 1)
+        name_str = str(row.get('full_name', '')).strip().upper()
+        
+        # Bersihkan format desimal .0 pada nomor handphone
+        raw_phone = str(row.get('phone', '')).strip()
+        if raw_phone.endswith('.0'):
+            raw_phone = raw_phone[:-2]
+        phone_str = raw_phone if raw_phone not in ['None', 'nan', ''] else '-'
+        
+        job_str = str(row.get('job_role', '')).strip()
+        comp_str = str(row.get('company', '')).strip()
+
+        table_content.append([
+            Paragraph(no_str, cell_center_style),
+            Paragraph(name_str, cell_style),
+            Paragraph(phone_str, cell_center_style),
+            Paragraph(job_str, cell_style),
+            Paragraph(comp_str, cell_style)
         ])
 
-    col_widths = [1.2*cm, 5.2*cm, 3.2*cm, 4.2*cm, 4.2*cm]
-    table_peserta = Table(table_rows, colWidths=col_widths, repeatRows=1)
-    table_peserta.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 0.8, colors.black),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('BACKGROUND', (0,0), (-1,0), colors.whitesmoke),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
-    ]))
-    story.append(table_peserta)
-    story.append(Spacer(1, 0.5*cm))
-
-    # 4. Dokumentasi & Tanda Tangan Instruktur
-    closing_elements = []
+    # Total lebar halaman: 17.5 cm (A4 width 21 cm - margin 3.5 cm)
+    # repeatRows=1 memastikan baris header 'NO, Nama, ...' otomatis terulang di halaman berikutnya jika baris > 25
+    col_widths = [1.0 * cm, 5.0 * cm, 3.5 * cm, 4.0 * cm, 4.0 * cm]
+    participants_table = Table(table_content, colWidths=col_widths, repeatRows=1)
     
-    if photo_bytes is not None:
-        try:
-            temp_img = io.BytesIO(photo_bytes)
-            pil_i = PILImage.open(temp_img)
-            w, h = pil_i.size
-            aspect = h / w
-            rl_img = RLImage(temp_img, width=8.5*cm, height=(8.5*cm * aspect))
-            closing_elements.append(Paragraph("<b>Dokumentasi Training:</b>", style_info))
-            closing_elements.append(Spacer(1, 0.2*cm))
-            closing_elements.append(rl_img)
-            closing_elements.append(Spacer(1, 0.3*cm))
-        except Exception:
-            pass
-
-    # Ambil gambar tanda tangan jika ada file ttd_instruktur.png
-    ttd_image = ""
-    if os.path.exists("ttd_instruktur.png"):
-        ttd_image = RLImage("ttd_instruktur.png", width=3.5*cm, height=2.0*cm)
-    else:
-        ttd_image = Spacer(1, 1.8*cm)
-
-    # Format tanda tangan instruktur
-    clean_inst_name = str(instructor_name).replace("<b>", "").replace("</b>", "").upper().strip()
-    sign_data = [
-        ["", Paragraph("Instruktur,", style_sign_title)],
-        ["", ttd_image],
-        ["", Paragraph(f"<u><b>{clean_inst_name}</b></u>", style_sign_name)]
-    ]
-    sign_table = Table(sign_data, colWidths=[11*cm, 7*cm])
-    sign_table.setStyle(TableStyle([
-        ('ALIGN', (1,0), (1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (1,0), (1,-1), 2),
-        ('TOPPADDING', (1,0), (1,-1), 2),
+    participants_table.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#000000')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#000000')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F8F9FA')),
     ]))
-    closing_elements.append(sign_table)
+    
+    story.append(participants_table)
+    story.append(Spacer(1, 0.6 * cm))
 
+    # ==================== 4. BUKTI FOTO & TANDA TANGAN INSTRUKTUR ====================
+    # KeepTogether membungkus elemen ini agar tidak terpisah canggung di batas halaman
+    closing_elements = []
+
+    doc_label_style = ParagraphStyle(
+        'DocLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#000000')
+    )
+    
+    inst_title_style = ParagraphStyle(
+        'InstTitle',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=12,
+        alignment=1, # Center
+        textColor=colors.HexColor('#000000')
+    )
+    
+    inst_name_style = ParagraphStyle(
+        'InstName',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=13,
+        alignment=1, # Center
+        textColor=colors.HexColor('#000000')
+    )
+
+    # Persiapan foto bukti dokumentasi
+    photo_flowable = Paragraph("<i>(Tidak ada lampiran foto)</i>", meta_val_style)
+    if photo_bytes:
+        try:
+            img_io = io.BytesIO(photo_bytes)
+            photo_flowable = RLImage(img_io, width=8.5 * cm, height=4.8 * cm)
+        except Exception:
+            photo_flowable = Paragraph("<i>(Gagal memuat gambar)</i>", meta_val_style)
+
+    # Persiapan Tanda Tangan
+    ttd_flowable = Spacer(1, 1.8 * cm)
+    if os.path.exists("ttd_instruktur.png"):
+        try:
+            ttd_flowable = RLImage("ttd_instruktur.png", width=3.8 * cm, height=1.8 * cm)
+        except Exception:
+            ttd_flowable = Spacer(1, 1.8 * cm)
+
+    instruktur_box = [
+        Paragraph("Instruktur,", inst_title_style),
+        Spacer(1, 0.1 * cm),
+        ttd_flowable,
+        Spacer(1, 0.1 * cm),
+        Paragraph(f"<b><u>{instructor_name.upper()}</u></b>", inst_name_style)
+    ]
+
+    closing_table_data = [
+        [
+            Paragraph("<b>Dokumentasi Training:</b>", doc_label_style),
+            ""
+        ],
+        [
+            photo_flowable,
+            instruktur_box
+        ]
+    ]
+
+    closing_table = Table(closing_table_data, colWidths=[10.5 * cm, 7.0 * cm])
+    closing_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (1, 1), (1, 1), 'CENTER'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+
+    closing_elements.append(closing_table)
     story.append(KeepTogether(closing_elements))
+
+    # Bangun Dokumen PDF
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
@@ -185,34 +284,37 @@ def generate_attendance_pdf(airline, date_display, time_str, venue_str, instruct
 
 def generate_attendance_excel(date_display, time_str, venue_str, instructor_name, df_session):
     """
-    Menghasilkan file Excel (.xlsx) Daftar Kehadiran tanpa duplikat.
+    Menghasilkan file spreadsheet Excel (.xlsx) untuk absensi resmi seluruh peserta.
     """
-    df_clean = df_session.drop_duplicates(subset=['nik']).reset_index(drop=True)
-    clean_inst_name = str(instructor_name).replace("<b>", "").replace("</b>", "").upper().strip()
-    
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        meta_df = pd.DataFrame([
-            ["DAFTAR KEHADIRAN TRAINING DANGEROUS GOODS AWARENESS", ""],
-            [f"Hari / Tanggal: {date_display}", ""],
-            [f"Pukul: {time_str}", ""],
-            [f"Tempat: {venue_str}", ""],
-            [f"Instruktur: {clean_inst_name}", ""],
-            ["", ""]
-        ])
-        meta_df.to_excel(writer, index=False, header=False, sheet_name='Absensi', startrow=0)
+    
+    excel_rows = []
+    df_sorted = df_session.reset_index(drop=True)
+    
+    for idx, row in df_sorted.iterrows():
+        raw_phone = str(row.get('phone', '')).strip()
+        if raw_phone.endswith('.0'):
+            raw_phone = raw_phone[:-2]
+        phone_clean = raw_phone if raw_phone not in ['None', 'nan', ''] else '-'
 
-        rows = []
-        for idx, r in df_clean.iterrows():
-            rows.append({
-                "NO": idx + 1,
-                "Nama": str(r.get('full_name', '')).upper(),
-                "No. Handphone": str(r.get('phone', '-')),
-                "Jabatan": str(r.get('job_role', '')),
-                "Instansi / Perusahaan": str(r.get('company', '')).upper()
-            })
-        df_out = pd.DataFrame(rows)
-        df_out.to_excel(writer, index=False, sheet_name='Absensi', startrow=6)
+        excel_rows.append({
+            'NO': idx + 1,
+            'Nama Peserta': str(row.get('full_name', '')).strip().upper(),
+            'No. Handphone': phone_clean,
+            'Jabatan / Unit Kerja': str(row.get('job_role', '')).strip(),
+            'Instansi / Perusahaan': str(row.get('company', '')).strip()
+        })
+
+    df_export = pd.DataFrame(excel_rows)
+
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_export.to_excel(writer, index=False, sheet_name='Daftar_Hadir')
+        ws = writer.sheets['Daftar_Hadir']
         
+        # Penyesuaian lebar kolom otomatis
+        col_widths = {'A': 6, 'B': 30, 'C': 18, 'D': 25, 'E': 25}
+        for col_letter, width in col_widths.items():
+            ws.column_dimensions[col_letter].width = width
+
     output.seek(0)
     return output.getvalue()
