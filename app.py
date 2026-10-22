@@ -4,6 +4,7 @@ from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 import io
 import os
+import zipfile
 
 from database import (
     init_db,
@@ -72,7 +73,7 @@ if not st.session_state["is_instructor"]:
             opacity: 0 !important;
             pointer-events: none !important;
         }
-        /* Tombol pembuka sidebar tetap terlihat di layar HP */
+        /* Tombol pembuka sidebar tetap terlihat jelas di HP */
         [data-testid="collapsedControl"] {
             display: flex !important;
             visibility: visible !important;
@@ -257,7 +258,7 @@ else:
             else:
                 st.error("PIN salah!")
 
-# Navigasi cepat langsung di bagian atas layar untuk pengguna HP
+# Navigasi atas cepat untuk peserta di layar HP
 if not st.session_state["is_instructor"]:
     nav_c1, nav_c2 = st.columns(2)
     with nav_c1:
@@ -359,7 +360,6 @@ elif menu == "Ujian DG Awareness":
             nik = st.text_input("NIK / Employee ID*")
             phone = st.text_input("No. Handphone / WhatsApp*")
 
-            # Default kosong dengan placeholder bertanda panah dropdown
             job_role_selected = st.selectbox(
                 "Jabatan / Unit Kerja*",
                 options=JOB_ROLES,
@@ -378,7 +378,6 @@ elif menu == "Ujian DG Awareness":
             dist_df = get_districts()
             dist_options = (dist_df['code'] + " - " + dist_df['name']).tolist() if not dist_df.empty else []
 
-            # Default kosong dengan placeholder bertanda panah dropdown
             selected_dist = st.selectbox(
                 "Distrik Penugasan*",
                 options=dist_options,
@@ -709,7 +708,9 @@ elif menu == "Dashboard Instruktur & Records":
                     except Exception as e:
                         st.error(f"Gagal generate Excel: {e}")
 
-        # Unduh Ulang Sertifikat
+        # =========================================================================
+        # 🎓 PUSAT CETAK / UNDUH ULANG SERTIFIKAT PESERTA (PERORANGAN & PER DISTRIK)
+        # =========================================================================
         st.markdown("---")
         st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
 
@@ -722,62 +723,195 @@ elif menu == "Dashboard Instruktur & Records":
         if passed_records.empty:
             st.info("Belum ada data peserta yang dinyatakan lulus untuk diunduh sertifikatnya.")
         else:
-            options_dict = {}
-            for idx, r in passed_records.iterrows():
-                label = f"{r['nik']} - {r['full_name']} ({r['district']}) | Tgl: {r['training_date']}"
-                options_dict[label] = r
+            tab_cert1, tab_cert2 = st.tabs(["📦 Unduh Sekaligus Per Distrik (.ZIP)", "👤 Unduh Perorangan"])
 
-            selected_candidate_label = st.selectbox(
-                "Pilih Peserta untuk Dicetak Ulang Sertifikatnya:",
-                options=list(options_dict.keys())
-            )
+            # ---------------- TAB 1: BATCH UNDUH PER DISTRIK ----------------
+            with tab_cert1:
+                st.markdown("##### 📁 Download Seluruh Sertifikat Peserta dalam 1 Distrik Sekaligus")
+                st.caption("Sistem akan mengompilasi seluruh PDF sertifikat peserta pada distrik yang dipilih ke dalam satu file arsip .ZIP.")
 
-            selected_candidate = options_dict[selected_candidate_label]
+                c_dist_list = sorted(passed_records['district'].dropna().unique().tolist())
+                c_sel_col1, c_sel_col2 = st.columns(2)
+                with c_sel_col1:
+                    batch_dist = st.selectbox("Pilih Distrik:", options=c_dist_list, key="batch_dist_select")
+                with c_sel_col2:
+                    dist_candidates = passed_records[passed_records['district'] == batch_dist]
+                    dist_dates = sorted(dist_candidates['training_date'].dropna().unique().tolist(), reverse=True)
+                    batch_date = st.selectbox("Pilih Tanggal Pelaksanaan (Opsional):", options=["Semua Tanggal"] + dist_dates, key="batch_date_select")
 
-            st.write(
-                f"**Peserta:** {selected_candidate['full_name']} | **Perusahaan:** {selected_candidate['company']} | "
-                f"**No Sertifikat SJ:** `{selected_candidate['cert_no_sj']}` | **No Sertifikat IN:** `{selected_candidate['cert_no_in']}`"
-            )
+                if batch_date != "Semua Tanggal":
+                    batch_candidates = dist_candidates[dist_candidates['training_date'] == batch_date].copy()
+                else:
+                    batch_candidates = dist_candidates.copy()
 
-            re_col1, re_col2 = st.columns(2)
+                st.info(f"Ditemukan **{len(batch_candidates)} orang peserta lulus** untuk Distrik **{batch_dist}**.")
 
-            with re_col1:
-                try:
-                    re_pdf_sj = generate_certificate(
-                        airline="SJ",
-                        cert_no=str(selected_candidate['cert_no_sj']),
-                        name=str(selected_candidate['full_name']),
-                        training_date_str=str(selected_candidate['training_date'])
-                    )
-                    st.download_button(
-                        label=f"📄 Unduh Ulang Sertifikat SJ ({selected_candidate['full_name']})",
-                        data=re_pdf_sj,
-                        file_name=f"Sertifikat_SJ_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="btn_re_sj"
-                    )
-                except Exception as e:
-                    st.error(f"Gagal mencetak ulang sertifikat SJ: {e}")
+                if not batch_candidates.empty:
+                    c_zip1, c_zip2, c_zip3 = st.columns(3)
 
-            with re_col2:
-                try:
-                    re_pdf_in = generate_certificate(
-                        airline="IN",
-                        cert_no=str(selected_candidate['cert_no_in']),
-                        name=str(selected_candidate['full_name']),
-                        training_date_str=str(selected_candidate['training_date'])
-                    )
-                    st.download_button(
-                        label=f"📄 Unduh Ulang Sertifikat IN ({selected_candidate['full_name']})",
-                        data=re_pdf_in,
-                        file_name=f"Sertifikat_IN_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="btn_re_in"
-                    )
-                except Exception as e:
-                    st.error(f"Gagal mencetak ulang sertifikat IN: {e}")
+                    # 1. Download Batch Sriwijaya Air (SJ)
+                    with c_zip1:
+                        if st.button("📦 Siapkan ZIP Sertifikat SJ", use_container_width=True, key="btn_prep_zip_sj"):
+                            with st.spinner("Mengompilasi sertifikat Sriwijaya Air..."):
+                                zip_buf_sj = io.BytesIO()
+                                with zipfile.ZipFile(zip_buf_sj, "w", zipfile.ZIP_DEFLATED) as zf:
+                                    for _, row in batch_candidates.iterrows():
+                                        try:
+                                            pdf_bytes = generate_certificate(
+                                                airline="SJ",
+                                                cert_no=str(row['cert_no_sj']).replace('.0', '').strip(),
+                                                name=str(row['full_name']).strip(),
+                                                training_date_str=str(row['training_date'])
+                                            )
+                                            clean_name = str(row['full_name']).strip().replace(' ', '_').replace('/', '_')
+                                            zf.writestr(f"Sertifikat_SJ_{row['cert_no_sj']}_{clean_name}.pdf", pdf_bytes)
+                                        except Exception:
+                                            pass
+                                zip_buf_sj.seek(0)
+                                st.session_state['zip_data_sj'] = zip_buf_sj.getvalue()
+
+                        if 'zip_data_sj' in st.session_state:
+                            st.download_button(
+                                label="📥 Unduh ZIP Sriwijaya Air (SJ)",
+                                data=st.session_state['zip_data_sj'],
+                                file_name=f"Sertifikat_SJ_Distrik_{batch_dist}.zip",
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="dl_zip_sj"
+                            )
+
+                    # 2. Download Batch NAM Air (IN)
+                    with c_zip2:
+                        if st.button("📦 Siapkan ZIP Sertifikat IN", use_container_width=True, key="btn_prep_zip_in"):
+                            with st.spinner("Mengompilasi sertifikat NAM Air..."):
+                                zip_buf_in = io.BytesIO()
+                                with zipfile.ZipFile(zip_buf_in, "w", zipfile.ZIP_DEFLATED) as zf:
+                                    for _, row in batch_candidates.iterrows():
+                                        try:
+                                            pdf_bytes = generate_certificate(
+                                                airline="IN",
+                                                cert_no=str(row['cert_no_in']).replace('.0', '').strip(),
+                                                name=str(row['full_name']).strip(),
+                                                training_date_str=str(row['training_date'])
+                                            )
+                                            clean_name = str(row['full_name']).strip().replace(' ', '_').replace('/', '_')
+                                            zf.writestr(f"Sertifikat_IN_{row['cert_no_in']}_{clean_name}.pdf", pdf_bytes)
+                                        except Exception:
+                                            pass
+                                zip_buf_in.seek(0)
+                                st.session_state['zip_data_in'] = zip_buf_in.getvalue()
+
+                        if 'zip_data_in' in st.session_state:
+                            st.download_button(
+                                label="📥 Unduh ZIP NAM Air (IN)",
+                                data=st.session_state['zip_data_in'],
+                                file_name=f"Sertifikat_IN_Distrik_{batch_dist}.zip",
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="dl_zip_in"
+                            )
+
+                    # 3. Download Batch Gabungan Kedua Maskapai (SJ & IN)
+                    with c_zip3:
+                        if st.button("📦 Siapkan ZIP Lengkap (SJ + IN)", use_container_width=True, key="btn_prep_zip_all"):
+                            with st.spinner("Mengompilasi seluruh sertifikat SJ & IN..."):
+                                zip_buf_all = io.BytesIO()
+                                with zipfile.ZipFile(zip_buf_all, "w", zipfile.ZIP_DEFLATED) as zf:
+                                    for _, row in batch_candidates.iterrows():
+                                        clean_name = str(row['full_name']).strip().replace(' ', '_').replace('/', '_')
+                                        try:
+                                            pdf_sj = generate_certificate(
+                                                airline="SJ",
+                                                cert_no=str(row['cert_no_sj']).replace('.0', '').strip(),
+                                                name=str(row['full_name']).strip(),
+                                                training_date_str=str(row['training_date'])
+                                            )
+                                            zf.writestr(f"Sriwijaya_Air/Sertifikat_SJ_{row['cert_no_sj']}_{clean_name}.pdf", pdf_sj)
+                                        except Exception:
+                                            pass
+                                        try:
+                                            pdf_in = generate_certificate(
+                                                airline="IN",
+                                                cert_no=str(row['cert_no_in']).replace('.0', '').strip(),
+                                                name=str(row['full_name']).strip(),
+                                                training_date_str=str(row['training_date'])
+                                            )
+                                            zf.writestr(f"NAM_Air/Sertifikat_IN_{row['cert_no_in']}_{clean_name}.pdf", pdf_in)
+                                        except Exception:
+                                            pass
+                                zip_buf_all.seek(0)
+                                st.session_state['zip_data_all'] = zip_buf_all.getvalue()
+
+                        if 'zip_data_all' in st.session_state:
+                            st.download_button(
+                                label="📥 Unduh ZIP Lengkap (SJ & IN)",
+                                data=st.session_state['zip_data_all'],
+                                file_name=f"Sertifikat_Lengkap_Distrik_{batch_dist}.zip",
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="dl_zip_all"
+                            )
+
+            # ---------------- TAB 2: UNDUH PERORANGAN ----------------
+            with tab_cert2:
+                st.markdown("##### 👤 Download Sertifikat Spesifik Per Peserta")
+                options_dict = {}
+                for idx, r in passed_records.iterrows():
+                    label = f"{r['nik']} - {r['full_name']} ({r['district']}) | Tgl: {r['training_date']}"
+                    options_dict[label] = r
+
+                selected_candidate_label = st.selectbox(
+                    "Pilih Peserta untuk Dicetak Ulang Sertifikatnya:",
+                    options=list(options_dict.keys()),
+                    key="single_cert_select"
+                )
+
+                selected_candidate = options_dict[selected_candidate_label]
+
+                st.write(
+                    f"**Peserta:** {selected_candidate['full_name']} | **Perusahaan:** {selected_candidate['company']} | "
+                    f"**No Sertifikat SJ:** `{selected_candidate['cert_no_sj']}` | **No Sertifikat IN:** `{selected_candidate['cert_no_in']}`"
+                )
+
+                re_col1, re_col2 = st.columns(2)
+
+                with re_col1:
+                    try:
+                        re_pdf_sj = generate_certificate(
+                            airline="SJ",
+                            cert_no=str(selected_candidate['cert_no_sj']).replace('.0', '').strip(),
+                            name=str(selected_candidate['full_name']),
+                            training_date_str=str(selected_candidate['training_date'])
+                        )
+                        st.download_button(
+                            label=f"📄 Unduh Ulang Sertifikat SJ ({selected_candidate['full_name']})",
+                            data=re_pdf_sj,
+                            file_name=f"Sertifikat_SJ_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="btn_re_sj"
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal mencetak ulang sertifikat SJ: {e}")
+
+                with re_col2:
+                    try:
+                        re_pdf_in = generate_certificate(
+                            airline="IN",
+                            cert_no=str(selected_candidate['cert_no_in']).replace('.0', '').strip(),
+                            name=str(selected_candidate['full_name']),
+                            training_date_str=str(selected_candidate['training_date'])
+                        )
+                        st.download_button(
+                            label=f"📄 Unduh Ulang Sertifikat IN ({selected_candidate['full_name']})",
+                            data=re_pdf_in,
+                            file_name=f"Sertifikat_IN_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="btn_re_in"
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal mencetak ulang sertifikat IN: {e}")
 
 
 # ==================== MENU 4: MASTER DISTRIK & RECURRENT ====================
