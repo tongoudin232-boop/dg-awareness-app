@@ -31,7 +31,7 @@ def init_db():
     if df_records is None or df_records.empty:
         empty_records = pd.DataFrame(columns=[
             "id", "training_date", "full_name", "nik", "phone",
-            "job_role", "company", "district", "score", "status",
+            "job_role", "company", "district", "district_full", "score", "status",
             "cert_no_sj", "cert_no_in", "expiry_date"
         ])
         conn.update(worksheet="training_records", data=empty_records)
@@ -47,7 +47,7 @@ def get_districts():
             if 'id' in df.columns:
                 df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
                 df = df[df['id'] > 0]
-                return df.sort_values(by='code').reset_index(drop=True)
+                return df.sort_values(by=['code', 'name']).reset_index(drop=True)
     except Exception:
         pass
     return pd.DataFrame()
@@ -169,7 +169,7 @@ def save_training_record(record_data):
     record_data['id'] = next_id
 
     target_dist_code = str(record_data.get('district', '')).strip()
-    target_dist_name = str(record_data.pop('district_name', '')).strip()
+    target_dist_name = str(record_data.get('district_name', '')).strip()
 
     new_row = pd.DataFrame([record_data])
     updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
@@ -219,7 +219,7 @@ def clear_all_training_records():
     conn = get_connection()
     empty_records = pd.DataFrame(columns=[
         "id", "training_date", "full_name", "nik", "phone",
-        "job_role", "company", "district", "score", "status",
+        "job_role", "company", "district", "district_full", "score", "status",
         "cert_no_sj", "cert_no_in", "expiry_date"
     ])
     conn.update(worksheet="training_records", data=empty_records)

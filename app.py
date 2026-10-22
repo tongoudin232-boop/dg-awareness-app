@@ -378,6 +378,7 @@ elif menu == "Ujian DG Awareness":
             dist_df = get_districts()
             dist_options = (dist_df['code'] + " - " + dist_df['name']).tolist() if not dist_df.empty else []
 
+            # Dasar pilihan Distrik Penugasan dari master distrik
             selected_dist = st.selectbox(
                 "Distrik Penugasan*",
                 options=dist_options,
@@ -423,7 +424,7 @@ elif menu == "Ujian DG Awareness":
 
                     score = correct_count * 4
 
-                    dist_parts = selected_dist.split(" - ")
+                    dist_parts = selected_dist.split(" - ", 1)
                     dist_code = dist_parts[0].strip()
                     dist_name = dist_parts[1].strip() if len(dist_parts) > 1 else ""
 
@@ -444,6 +445,7 @@ elif menu == "Ujian DG Awareness":
                             'company': company.strip(),
                             'district': dist_code,
                             'district_name': dist_name,
+                            'district_full': selected_dist, # Menyimpan pilihan distrik lengkap
                             'score': score,
                             'status': 'LULUS',
                             'cert_no_sj': cert_no_sj,
@@ -487,6 +489,7 @@ elif menu == "Ujian DG Awareness":
                             'company': company.strip(),
                             'district': dist_code,
                             'district_name': dist_name,
+                            'district_full': selected_dist,
                             'score': score,
                             'status': 'TIDAK LULUS',
                             'cert_no_sj': '-',
@@ -709,7 +712,7 @@ elif menu == "Dashboard Instruktur & Records":
                         st.error(f"Gagal generate Excel: {e}")
 
         # =========================================================================
-        # 🎓 PUSAT CETAK / UNDUH ULANG SERTIFIKAT PESERTA (PERORANGAN & PER DISTRIK)
+        # 🎓 PUSAT CETAK / UNDUH ULANG SERTIFIKAT PESERTA (BERDASARKAN DISTRIK PENUGASAN)
         # =========================================================================
         st.markdown("---")
         st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
@@ -723,28 +726,80 @@ elif menu == "Dashboard Instruktur & Records":
         if passed_records.empty:
             st.info("Belum ada data peserta yang dinyatakan lulus untuk diunduh sertifikatnya.")
         else:
-            tab_cert1, tab_cert2 = st.tabs(["📦 Unduh Sekaligus Per Distrik (.ZIP)", "👤 Unduh Perorangan"])
+            tab_cert1, tab_cert2 = st.tabs(["📦 Unduh Sekaligus Berdasarkan Pilihan Distrik (.ZIP)", "👤 Unduh Perorangan"])
 
-            # ---------------- TAB 1: BATCH UNDUH PER DISTRIK ----------------
+            # ---------------- TAB 1: BATCH UNDUH BERDASARKAN DISTRIK PENUGASAN ----------------
             with tab_cert1:
-                st.markdown("##### 📁 Download Seluruh Sertifikat Peserta dalam 1 Distrik Sekaligus")
-                st.caption("Sistem akan mengompilasi seluruh PDF sertifikat peserta pada distrik yang dipilih ke dalam satu file arsip .ZIP.")
+                st.markdown("##### 📁 Download Sertifikat Sesuai Distrik Penugasan")
+                st.caption("Pilihan di bawah ini merujuk langsung pada nama unit di Master Distrik Penugasan (misal: BTH - GH & Internal, BTH - WH IAS, dll.).")
 
-                c_dist_list = sorted(passed_records['district'].dropna().unique().tolist())
-                c_sel_col1, c_sel_col2 = st.columns(2)
-                with c_sel_col1:
-                    batch_dist = st.selectbox("Pilih Distrik:", options=c_dist_list, key="batch_dist_select")
-                with c_sel_col2:
-                    dist_candidates = passed_records[passed_records['district'] == batch_dist]
-                    dist_dates = sorted(dist_candidates['training_date'].dropna().unique().tolist(), reverse=True)
-                    batch_date = st.selectbox("Pilih Tanggal Pelaksanaan (Opsional):", options=["Semua Tanggal"] + dist_dates, key="batch_date_select")
+                p_copy = passed_records.copy()
+                
+                # Mengambil daftar pilihan yang terdaftar di database peserta
+                dist_df_master = get_districts()
+                master_dist_list = (dist_df_master['code'] + " - " + dist_df_master['name']).tolist() if not dist_df_master.empty else []
+
+                # Cek kolom district_full jika ada, atau buat kombinasi district + company
+                if 'district_full' in p_copy.columns:
+                    actual_choices = p_copy['district_full'].dropna().unique().tolist()
+                else:
+                    actual_choices = []
+
+                # Gabungkan opsi yang tersedia agar komprehensif
+                all_choices = sorted(list(set(master_dist_list + actual_choices)))
+                
+                # Tambahkan opsi global per kode bandara (misal BTH - Semua Unit)
+                dist_codes = sorted(p_copy['district'].dropna().unique().tolist())
+                for d_code in dist_codes:
+                    all_choices.insert(0, f"{d_code} - (Semua Unit / Perusahaan)")
+
+                sel_group_col1, sel_group_col2 = st.columns(2)
+                with sel_group_col1:
+                    selected_group = st.selectbox(
+                        "Pilih Distrik Penugasan Target:",
+                        options=all_choices,
+                        key="batch_group_select"
+                    )
+
+                # Logika pemfilteran peserta
+                g_parts = selected_group.split(" - ", 1)
+                target_dist = g_parts[0].strip()
+                target_name = g_parts[1].strip() if len(g_parts) > 1 else ""
+
+                if target_name == "(Semua Unit / Perusahaan)":
+                    filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
+                    group_tag = f"{target_dist}_SEMUA"
+                else:
+                    # Filter berdasarkan kecocokan di district_full, nama distrik, atau nama perusahaan
+                    filtered_candidates = p_copy[
+                        (p_copy['district'] == target_dist) & (
+                            (p_copy.get('district_full', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)) |
+                            (p_copy.get('district_name', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)) |
+                            (p_copy['company'].astype(str).str.contains(target_name, case=False, na=False))
+                        )
+                    ].copy()
+                    
+                    # Jika peserta lama belum memiliki district_full dan company sedikit berbeda, tetap ambil berdasarkan target_dist jika hasil kosong
+                    if filtered_candidates.empty:
+                        filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
+                    
+                    clean_tag_name = target_name.replace(' ', '_').replace('&', 'dan').replace('/', '_')
+                    group_tag = f"{target_dist}_{clean_tag_name}"
+
+                with sel_group_col2:
+                    dist_dates = sorted(filtered_candidates['training_date'].dropna().unique().tolist(), reverse=True)
+                    batch_date = st.selectbox(
+                        "Pilih Tanggal Pelaksanaan (Opsional):",
+                        options=["Semua Tanggal"] + dist_dates,
+                        key="batch_date_select"
+                    )
 
                 if batch_date != "Semua Tanggal":
-                    batch_candidates = dist_candidates[dist_candidates['training_date'] == batch_date].copy()
+                    batch_candidates = filtered_candidates[filtered_candidates['training_date'] == batch_date].copy()
                 else:
-                    batch_candidates = dist_candidates.copy()
+                    batch_candidates = filtered_candidates.copy()
 
-                st.info(f"Ditemukan **{len(batch_candidates)} orang peserta lulus** untuk Distrik **{batch_dist}**.")
+                st.info(f"Ditemukan **{len(batch_candidates)} orang peserta** untuk target: **{selected_group}**.")
 
                 if not batch_candidates.empty:
                     c_zip1, c_zip2, c_zip3 = st.columns(3)
@@ -774,7 +829,7 @@ elif menu == "Dashboard Instruktur & Records":
                             st.download_button(
                                 label="📥 Unduh ZIP Sriwijaya Air (SJ)",
                                 data=st.session_state['zip_data_sj'],
-                                file_name=f"Sertifikat_SJ_Distrik_{batch_dist}.zip",
+                                file_name=f"Sertifikat_SJ_{group_tag}.zip",
                                 mime="application/zip",
                                 use_container_width=True,
                                 key="dl_zip_sj"
@@ -805,13 +860,13 @@ elif menu == "Dashboard Instruktur & Records":
                             st.download_button(
                                 label="📥 Unduh ZIP NAM Air (IN)",
                                 data=st.session_state['zip_data_in'],
-                                file_name=f"Sertifikat_IN_Distrik_{batch_dist}.zip",
+                                file_name=f"Sertifikat_IN_{group_tag}.zip",
                                 mime="application/zip",
                                 use_container_width=True,
                                 key="dl_zip_in"
                             )
 
-                    # 3. Download Batch Gabungan Kedua Maskapai (SJ & IN)
+                    # 3. Download Batch Gabungan Lengkap (SJ + IN)
                     with c_zip3:
                         if st.button("📦 Siapkan ZIP Lengkap (SJ + IN)", use_container_width=True, key="btn_prep_zip_all"):
                             with st.spinner("Mengompilasi seluruh sertifikat SJ & IN..."):
@@ -846,7 +901,7 @@ elif menu == "Dashboard Instruktur & Records":
                             st.download_button(
                                 label="📥 Unduh ZIP Lengkap (SJ & IN)",
                                 data=st.session_state['zip_data_all'],
-                                file_name=f"Sertifikat_Lengkap_Distrik_{batch_dist}.zip",
+                                file_name=f"Sertifikat_Lengkap_{group_tag}.zip",
                                 mime="application/zip",
                                 use_container_width=True,
                                 key="dl_zip_all"
@@ -857,7 +912,7 @@ elif menu == "Dashboard Instruktur & Records":
                 st.markdown("##### 👤 Download Sertifikat Spesifik Per Peserta")
                 options_dict = {}
                 for idx, r in passed_records.iterrows():
-                    label = f"{r['nik']} - {r['full_name']} ({r['district']}) | Tgl: {r['training_date']}"
+                    label = f"{r['nik']} - {r['full_name']} ({r['district']} - {r['company']}) | Tgl: {r['training_date']}"
                     options_dict[label] = r
 
                 selected_candidate_label = st.selectbox(
