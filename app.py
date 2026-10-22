@@ -731,7 +731,7 @@ elif menu == "Dashboard Instruktur & Records":
                 master_dist_list = (dist_df_master['code'] + " - " + dist_df_master['name']).tolist() if not dist_df_master.empty else []
 
                 if 'district_full' in p_copy.columns:
-                    actual_choices = p_copy['district_full'].dropna().unique().tolist()
+                    actual_choices = [str(x).strip() for x in p_copy['district_full'].dropna().unique() if str(x).strip()]
                 else:
                     actual_choices = []
 
@@ -750,7 +750,7 @@ elif menu == "Dashboard Instruktur & Records":
                         key="batch_group_select"
                     )
 
-                # ==================== PEMFILTERAN CERDAS & PRESISI ====================
+                # ==================== PEMFILTERAN CERDAS, AKURAT & ROBUST ====================
                 g_parts = selected_group.split(" - ", 1)
                 target_dist = g_parts[0].strip()
                 target_name = g_parts[1].strip() if len(g_parts) > 1 else ""
@@ -761,20 +761,27 @@ elif menu == "Dashboard Instruktur & Records":
                 else:
                     df_dist_only = p_copy[p_copy['district'] == target_dist].copy()
                     
-                    match_mask = (
-                        df_dist_only.get('district_full', pd.Series()).astype(str).str.contains(target_name, case=False, na=False) |
-                        df_dist_only.get('district_name', pd.Series()).astype(str).str.contains(target_name, case=False, na=False)
-                    )
-                    
-                    name_upper = target_name.upper()
-                    if "IAS" in name_upper:
-                        match_mask = match_mask | df_dist_only['company'].astype(str).str.contains("IAS|INTEGRASI", case=False, na=False)
-                    elif "GH" in name_upper or "INTERNAL" in name_upper:
-                        match_mask = match_mask | df_dist_only['company'].astype(str).str.contains("MALINDO|GAS|GAA|SRIWIJAYA|NAM", case=False, na=False)
-                    else:
-                        match_mask = match_mask | df_dist_only['company'].astype(str).str.contains(target_name, case=False, na=False)
+                    # Gabungkan seluruh kolom identitas teks yang ada pada data
+                    search_corpus = df_dist_only['company'].fillna('').astype(str)
+                    if 'district_full' in df_dist_only.columns:
+                        search_corpus = search_corpus + " " + df_dist_only['district_full'].fillna('').astype(str)
+                    if 'district_name' in df_dist_only.columns:
+                        search_corpus = search_corpus + " " + df_dist_only['district_name'].fillna('').astype(str)
 
-                    filtered_candidates = df_dist_only[match_mask].copy()
+                    name_upper = target_name.upper()
+                    
+                    if "IAS" in name_upper:
+                        # Menangkap peserta dari IAS (WH IAS)
+                        mask = search_corpus.str.contains(r"IAS|INTEGRASI", case=False, na=False)
+                    elif "GH" in name_upper or "INTERNAL" in name_upper:
+                        # Menangkap peserta GH & Internal (non-IAS di distrik yang sama)
+                        mask = ~search_corpus.str.contains(r"IAS|INTEGRASI", case=False, na=False)
+                    else:
+                        # Default kata kunci spesifik
+                        clean_keyword = target_name.split()[0] if target_name else ""
+                        mask = search_corpus.str.contains(clean_keyword, case=False, na=False)
+
+                    filtered_candidates = df_dist_only[mask].copy()
                     clean_tag_name = target_name.replace(' ', '_').replace('&', 'dan').replace('/', '_')
                     group_tag = f"{target_dist}_{clean_tag_name}"
 
