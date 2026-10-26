@@ -28,7 +28,7 @@ st.set_page_config(
     page_title="DG Awareness Training - SJ & IN",
     layout="wide",
     page_icon="✈️",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Inisialisasi Session State Login Instruktur
