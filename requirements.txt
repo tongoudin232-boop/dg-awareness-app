@@ -2,8 +2,11 @@ streamlit
 pandas
 openpyxl
 reportlab
-pypdf
+PyPDF2
 qrcode
 pillow
 python-dateutil
-st-gsheets-connection
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
