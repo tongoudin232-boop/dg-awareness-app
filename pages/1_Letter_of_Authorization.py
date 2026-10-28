@@ -86,7 +86,9 @@ def get_credentials():
 @st.cache_resource
 def init_google_resources():
     creds = get_credentials()
-    if not creds: return None, None, None, None, None
+    if not creds: 
+        st.error("DEBUG: Credentials gagal dimuat dari st.secrets!")
+        return None, None, None, None, None
     try:
         s_drv = build("drive", "v3", credentials=creds, cache_discovery=False)
         s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
@@ -97,8 +99,8 @@ def init_google_resources():
                 sid = st.secrets["google_drive"].get("spreadsheet_id", "")
                 fid = st.secrets["google_drive"].get("folder_id_photos", "")
                 lid = st.secrets["google_drive"].get("folder_id_licenses", "")
-        except:
-            pass
+        except Exception as e:
+            st.error(f"DEBUG: Gagal membaca section google_drive di secrets: {e}")
             
         if not sid or not fid or not lid:
             res = s_drv.files().list(pageSize=100, q="trashed = false", fields="files(id, name, mimeType)").execute()
@@ -108,7 +110,8 @@ def init_google_resources():
                 elif not lid and f["name"] == "LoA_Sertifikat_DG": lid = f["id"]
                 
         return s_sht, s_drv, sid, fid, lid
-    except:
+    except Exception as e:
+        st.error(f"DEBUG ERROR init_google_resources: {e}")
         return None, None, None, None, None
 
 service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
