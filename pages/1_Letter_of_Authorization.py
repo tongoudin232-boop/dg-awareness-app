@@ -91,11 +91,22 @@ def init_google_resources():
         s_drv = build("drive", "v3", credentials=creds, cache_discovery=False)
         s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
         sid, fid, lid = "", "", ""
-        res = s_drv.files().list(pageSize=50, q="trashed = false", fields="files(id, name, mimeType)").execute()
-        for f in res.get("files", []):
-            if f["name"] == "DG_Awareness_Database" and f["mimeType"] == "application/vnd.google-apps.spreadsheet": sid = f["id"]
-            elif f["name"] == "LoA_Foto_Peserta": fid = f["id"]
-            elif f["name"] == "LoA_Sertifikat_DG": lid = f["id"]
+        
+        try:
+            if "google_drive" in st.secrets:
+                sid = st.secrets["google_drive"].get("spreadsheet_id", "")
+                fid = st.secrets["google_drive"].get("folder_id_photos", "")
+                lid = st.secrets["google_drive"].get("folder_id_licenses", "")
+        except:
+            pass
+            
+        if not sid or not fid or not lid:
+            res = s_drv.files().list(pageSize=100, q="trashed = false", fields="files(id, name, mimeType)").execute()
+            for f in res.get("files", []):
+                if not sid and f["name"] == "DG_Awareness_Database" and f["mimeType"] == "application/vnd.google-apps.spreadsheet": sid = f["id"]
+                elif not fid and f["name"] == "LoA_Foto_Peserta": fid = f["id"]
+                elif not lid and f["name"] == "LoA_Sertifikat_DG": lid = f["id"]
+                
         return s_sht, s_drv, sid, fid, lid
     except:
         return None, None, None, None, None
