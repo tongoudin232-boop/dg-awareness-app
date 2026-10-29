@@ -65,25 +65,32 @@ TAB_NAME = "DataPesertaLoA"
 
 def get_credentials():
     try:
-        secrets_path = os.path.join(".streamlit", "secrets.toml")
-        if os.path.exists(secrets_path):
-            import toml
-            secrets_data = toml.load(secrets_path)
-            creds_info = dict(secrets_data["gcp_service_account"])
-        elif "gcp_service_account" in st.secrets:
+        if "gcp_service_account" in st.secrets:
             creds_info = dict(st.secrets["gcp_service_account"])
-        elif os.path.exists("service_account.json"):
-            return Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
         else:
+            creds_info = dict(st.secrets)
+            
+        if not creds_info or "private_key" not in creds_info:
+            st.error("DEBUG: st.secrets kosong atau tidak ada gcp_service_account!")
             return None
 
         if "private_key" in creds_info:
-            creds_info["private_key"] = creds_info["private_key"].replace("-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----").replace("-----END RSA PRIVATE KEY-----", "-----END PRIVATE KEY-----")
+            pk = str(creds_info["private_key"])
+            # Tangani berbagai macam format newline (
+ atau literal 
+)
+            pk = pk.replace("\n", "
+").replace("
+", "
+")
+            creds_info["private_key"] = pk.strip()
+            
         return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-    except:
+    except Exception as e:
+        st.error(f"DEBUG GET_CREDENTIALS EXCEPTION: {e}")
         return None
 
-@st.cache_resource
+
 def init_google_resources():
     creds = get_credentials()
     if not creds: 
