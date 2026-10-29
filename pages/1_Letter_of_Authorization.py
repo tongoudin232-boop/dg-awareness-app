@@ -289,7 +289,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membuat dokumen PDF LoA bersih dari nol murni menggunakan ReportLab tanpa merge tumpang tindih """
+    """ Mengisi blangko resmi template PDF Kemenhub secara presisi pada titik isian kosong tanpa merusak format asli """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -303,15 +303,10 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
-    carrier_name = "Sriwijaya Air" if carrier == "SJ" else "Nam Air"
     
-    can.setFillColorRGB(1, 1, 1)
-    can.rect(0, 0, w, h, fill=True, stroke=False)
+    can.setFillColorRGB(0, 0, 0)
     
-    can.setFillColorRGB(0.95, 0.95, 0.95)
-    can.setStrokeColorRGB(0.8, 0.8, 0.8)
-    can.rect(w * 0.07, h * 0.355, 118, 148, fill=True, stroke=True)
-    
+    # 1. FOTO PESERTA: Pas di dalam kotak foto blangko resmi (Kiri)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -326,63 +321,35 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         except Exception:
             pass
 
-    can.setFillColorRGB(0.95, 0.95, 0.95)
-    can.rect(w * 0.07, h * 0.08, 118, 75, fill=True, stroke=True)
-    can.setFillColorRGB(0, 0, 0)
-    can.setFont("Helvetica-Bold", 10)
-    can.drawString(w * 0.09, h * 0.14, "VALID DATE")
-    can.setFont("Helvetica-Bold", 12)
-    can.drawCentredString(w * 0.135, h * 0.105, f"{valid_date_fmt}")
-
-    can.setFont("Helvetica-Bold", 15)
-    can.drawCentredString(w * 0.58, h * 0.83, "LETTER OF AUTHORIZATION")
-
+    # 2. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko resmi
     can.setFont("Helvetica-Bold", 11)
     can.drawCentredString(w * 0.58, h * 0.765, f"{no_loa}")
     
+    # 3. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko resmi
     can.setFont("Helvetica-Bold", 10)
-    can.drawString(w * 0.31, h * 0.69, f"PT {carrier_name}, here by grant the delegation authority to:")
+    can.drawString(w * 0.42, h * 0.647, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.42, h * 0.605, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.42, h * 0.563, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.42, h * 0.522, f"{p.get('perusahaan', '-')}")
     
-    labels = ["Name", "Nik", "Job Title", "Company"]
-    values = [
-        str(p.get('nama', '-')),
-        str(p.get('nik_emp', '-')),
-        str(p.get('jabatan', '-')),
-        str(p.get('perusahaan', '-'))
-    ]
-    
-    start_y = h * 0.645
-    gap_y = 0.041 * h
-    
-    for i in range(4):
-        y_pos = start_y - (i * gap_y)
-        can.setFont("Helvetica-Bold", 10)
-        can.drawString(w * 0.31, y_pos, labels[i])
-        can.drawString(w * 0.40, y_pos, ":")
-        can.drawString(w * 0.42, y_pos, values[i])
-
-    can.setFont("Helvetica-Bold", 10)
-    can.drawString(w * 0.31, h * 0.47, "To act on behalf of the commercial director as a:")
-    
+    # 4. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko resmi
     can.setFont("Helvetica-Bold", 15)
-    can.setFillColorRGB(0, 0, 0)
+    if carrier == "SJ":
+        can.setFillColorRGB(0, 0.12, 0.37)
+    else:
+        can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.58, h * 0.415, f"{role_str}")
     
-    can.setFont("Helvetica", 9.5)
-    can.drawCentredString(w * 0.58, h * 0.33, f"This letter of authority is only valid to be performed at PT {carrier_name}")
-
+    # 5. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko resmi
+    can.setFillColorRGB(0, 0, 0)
+    can.setFont("Helvetica-Bold", 12)
+    can.drawCentredString(w * 0.135, h * 0.105, f"{valid_date_fmt}")
+    
+    # 6. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko resmi
     can.setFont("Helvetica-Oblique", 11)
     can.drawCentredString(w * 0.74, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
     
-    can.setFont("Helvetica-Bold", 11)
-    can.drawCentredString(w * 0.74, h * 0.14, "Ronald MP Sihombing")
-    
-    can.setLineWidth(0.75)
-    can.line(w * 0.63, h * 0.128, w * 0.85, h * 0.128)
-
-    can.setFont("Helvetica-Bold", 10)
-    can.drawCentredString(w * 0.74, h * 0.09, "COMMERCIAL MANAGER")
-
+    # 7. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko resmi (menggantikan tanda tangan)
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
         qr = qrcode.QRCode(version=1, box_size=2, border=1)
@@ -398,7 +365,17 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.save()
     packet.seek(0)
-    return packet.getvalue()
+    new_pdf = PdfReader(packet)
+    
+    try:
+        output = PdfWriter()
+        page.merge_page(new_pdf.pages[0])
+        output.add_page(page)
+        final_pdf = io.BytesIO()
+        output.write(final_pdf)
+        return final_pdf.getvalue()
+    except Exception as e:
+        return None
 
 
 SOAL_UJIAN_RESMI = [
