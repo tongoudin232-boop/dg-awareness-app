@@ -129,6 +129,7 @@ def upload_file_handler(uploaded_file, folder_id, filename):
         except: pass
     return l_path
 
+
 PESERTA_LOCAL_DB = "peserta_loa_db.json"
 
 def load_local_db():
@@ -151,6 +152,7 @@ def load_data_peserta():
     if "local_peserta_loa" not in st.session_state: 
         st.session_state.local_peserta_loa = load_local_db()
         
+    # Coba ambil dari Google Sheets jika service aktif
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -168,8 +170,9 @@ def load_data_peserta():
                     if col not in df.columns: df[col] = ""
                 return df
         except Exception:
-            pass
+            pass # Fallback ke local storage jika gagal/404
             
+    # Fallback ke local storage / session state
     if not st.session_state.local_peserta_loa:
         st.session_state.local_peserta_loa = load_local_db()
     
@@ -187,6 +190,7 @@ def save_new_peserta(d):
     st.session_state.local_peserta_loa.append(d)
     save_local_db(st.session_state.local_peserta_loa)
     
+    # Coba sinkronkan ke Google Sheets jika aktif
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -203,9 +207,11 @@ def save_new_peserta(d):
                 body={"values": [rv]}
             ).execute()
         except Exception:
-            pass
+            pass # Data sudah tersimpan aman di local JSON, tidak akan bikin frustasi!
             
     return True
+
+
 
 def update_peserta(no_id, uf):
     if "local_peserta_loa" in st.session_state:
@@ -268,9 +274,10 @@ def generate_nomor_loa(df_all, carrier):
     return f"{cl:04d}/LOA/{ct}/{romawi}/{today.year}"
 
 # ---------------------------------------------------------
-# GENERATOR LIVE PDF TAMPING OVERLAY (ZERO-OVERLAP FIX)
+# GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
+    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi tanpa tumpang tindih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -285,9 +292,18 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
+    # 1. TUTUP AREA TEKS LAMA DENGAN KOTAK PUTIH BERSIH (Agar tidak bertumpuk)
+    can.setFillColorRGB(1, 1, 1)
+    # Kotak putih untuk menutup area Name - Company lama
+    can.rect(w * 0.30, h * 0.48, w * 0.45, h * 0.22, fill=True, stroke=False)
+    # Kotak putih untuk menutup area nomor LoA lama di bawah judul
+    can.rect(w * 0.45, h * 0.74, w * 0.30, h * 0.08, fill=True, stroke=False)
+    # Kotak putih untuk menutup area tempat & tanggal lama
+    can.rect(w * 0.35, h * 0.20, w * 0.35, h * 0.06, fill=True, stroke=False)
+
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. Foto Peserta di bawah logo (Kiri)
+    # 2. FOTO PESERTA: Di bawah logo Sriwijaya/NAM Air, proporsional (width=65, height=85)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -302,18 +318,32 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         except Exception:
             pass
 
-    # 2. Nomor LoA (10pt, Bold)
+    # 3. NOMOR LoA: Font Bold, ukuran 10pt
     can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. Data Karyawan: Dicetak terpisah baris demi baris di X = 42% (sebelah kanan titik dua)
-    can.setFont("Helvetica-Bold", 10)
-    can.drawString(w * 0.42, h * 0.620, f"{p.get('nama', '-')}")
-    can.drawString(w * 0.42, h * 0.582, f"{p.get('nik_emp', '-')}")
-    can.drawString(w * 0.42, h * 0.544, f"{p.get('jabatan', '-')}")
-    can.drawString(w * 0.42, h * 0.506, f"{p.get('perusahaan', '-')}")
+    # 4. CETAK ULANG LABEL + TITIK DUA + ISIAN DATA KARYAWAN (Rapi, Sejajar, Tidak Bertumpuk)
+    # Kolom Label (Kiri)
+    can.setFont("Helvetica", 9.5)
+    can.drawString(w * 0.31, h * 0.655, "Name")
+    can.drawString(w * 0.31, h * 0.615, "Nik")
+    can.drawString(w * 0.31, h * 0.575, "Job Title")
+    can.drawString(w * 0.31, h * 0.535, "Company")
     
-    # 4. Role Karyawan (12pt, Bold, Biru/Merah)
+    # Titik Dua (Tengah)
+    can.drawString(w * 0.40, h * 0.655, ":")
+    can.drawString(w * 0.40, h * 0.615, ":")
+    can.drawString(w * 0.40, h * 0.575, ":")
+    can.drawString(w * 0.40, h * 0.535, ":")
+    
+    # Nilai Isian (Kanan - Font Bold 10pt)
+    can.setFont("Helvetica-Bold", 10)
+    can.drawString(w * 0.42, h * 0.655, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.42, h * 0.615, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.42, h * 0.575, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.42, h * 0.535, f"{p.get('perusahaan', '-')}")
+    
+    # 5. ROLE KARYAWAN: Font Bold, ukuran 12pt (Biru untuk SJ, Merah untuk IN)
     can.setFont("Helvetica-Bold", 12)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
@@ -321,16 +351,16 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.58, h * 0.40, f"{role_str}")
     
-    # 5. Valid Date (10pt, Bold)
+    # 6. VALID DATE: Diperkecil sizenya (10pt)
     can.setFillColorRGB(0, 0, 0)
     can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.115, h * 0.13, f"{valid_date_fmt}")
     
-    # 6. Tempat & Tanggal (9.5pt, Semi-Bold Italics / Oblique)
+    # 7. TEMPAT, TANGGAL: Font Semi-Bold Italics (Oblique), ukuran 9.5pt
     can.setFont("Helvetica-Oblique", 9.5)
-    can.drawCentredString(w * 0.62, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
+    can.drawCentredString(w * 0.52, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 7. QR Code Verifikasi Keaslian (Kecil & Rapi di Sudut Kanan Bawah)
+    # 8. QR CODE VERIFIKASI KEASLIAN DATA (Kecil & Rapi di sudut kanan bawah)
     verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED"
     qr = qrcode.QRCode(version=1, box_size=2, border=1)
     qr.add_data(verify_text)
@@ -355,6 +385,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         return final_pdf.getvalue()
     except Exception as e:
         return None
+
 
 SOAL_UJIAN_RESMI = [
     {"no": 1, "q": "Klasifikasi Dangerous Goods dibagi menjadi?", "options": ["a) 1 class", "b) 7 Class", "c) 9 Class", "d) 8 Class"], "a": "c) 9 Class"},
