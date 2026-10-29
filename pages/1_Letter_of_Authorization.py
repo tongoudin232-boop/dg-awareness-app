@@ -277,7 +277,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi mutlak tanpa tumpang tindih """
+    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi tanpa tumpang tindih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -294,7 +294,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA: Di bawah logo Sriwijaya/NAM Air, diperkecil ukurannya (width=70, height=92)
+    # 1. FOTO PESERTA: Di bawah logo Sriwijaya/NAM Air, ukuran proporsional (width=65, height=85)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -305,22 +305,22 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.05, h * 0.50, width=70, height=92)
+            can.drawImage(ImageReader(foto_local), w * 0.045, h * 0.52, width=65, height=85)
         except Exception:
             pass
 
-    # 2. NOMOR LoA: Diperkecil sizenya (10pt)
+    # 2. NOMOR LoA: Font Bold, ukuran 10pt
     can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. DATA KARYAWAN (Name - Company): Diperkecil sizenya (10pt) & koordinat Y terpisah rapi tanpa bertumpuk
-    can.setFont("Helvetica", 10)
-    can.drawString(w * 0.38, h * 0.620, f"{p.get('nama', '-')}")
-    can.drawString(w * 0.38, h * 0.582, f"{p.get('nik_emp', '-')}")
-    can.drawString(w * 0.38, h * 0.544, f"{p.get('jabatan', '-')}")
-    can.drawString(w * 0.38, h * 0.506, f"{p.get('perusahaan', '-')}")
+    # 3. DATA KARYAWAN (Name - Company): Tepat di sebelah kanan titik dua (X = 42%) agar tidak menimpa label asli
+    can.setFont("Helvetica-Bold", 10)
+    can.drawString(w * 0.42, h * 0.620, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.42, h * 0.582, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.42, h * 0.544, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.42, h * 0.506, f"{p.get('perusahaan', '-')}")
     
-    # 4. ROLE KARYAWAN: Diperkecil sizenya (12pt)
+    # 4. ROLE KARYAWAN: Font Bold, ukuran 12pt (Biru untuk SJ, Merah untuk IN)
     can.setFont("Helvetica-Bold", 12)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
@@ -328,14 +328,14 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.58, h * 0.40, f"{role_str}")
     
-    # 5. VALID DATE: Diperkecil sizenya
+    # 5. VALID DATE: Diperkecil sizenya (10pt)
     can.setFillColorRGB(0, 0, 0)
     can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.115, h * 0.13, f"{valid_date_fmt}")
     
-    # 6. TEMPAT, TANGGAL: Diperkecil sizenya (9.5pt)
+    # 6. TEMPAT, TANGGAL: Font Semi-Bold Italics (Oblique), ukuran 9.5pt
     can.setFont("Helvetica-Oblique", 9.5)
-    can.drawCentredString(w * 0.55, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
+    can.drawCentredString(w * 0.62, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
     # 7. QR CODE VERIFIKASI KEASLIAN DATA (Kecil & Rapi di sudut kanan bawah, tidak menutupi nama Ronald)
     verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED"
@@ -362,7 +362,6 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         return final_pdf.getvalue()
     except Exception as e:
         return None
-
 
 SOAL_UJIAN_RESMI = [
     {"no": 1, "q": "Klasifikasi Dangerous Goods dibagi menjadi?", "options": ["a) 1 class", "b) 7 Class", "c) 9 Class", "d) 8 Class"], "a": "c) 9 Class"},
