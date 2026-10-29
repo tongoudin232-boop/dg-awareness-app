@@ -86,7 +86,6 @@ def get_credentials():
 def init_google_resources():
     creds = get_credentials()
     if not creds: 
-        st.error("DEBUG: Credentials gagal dimuat dari st.secrets!")
         return None, None, None, None, None
     try:
         s_drv = build("drive", "v3", credentials=creds, cache_discovery=False)
@@ -98,8 +97,8 @@ def init_google_resources():
                 sid = st.secrets["google_drive"].get("spreadsheet_id", "")
                 fid = st.secrets["google_drive"].get("folder_id_photos", "")
                 lid = st.secrets["google_drive"].get("folder_id_licenses", "")
-        except Exception as e:
-            st.error(f"DEBUG: Gagal membaca section google_drive di secrets: {e}")
+        except Exception:
+            pass
             
         if not sid or not fid or not lid:
             res = s_drv.files().list(pageSize=100, q="trashed = false", fields="files(id, name, mimeType)").execute()
@@ -108,12 +107,22 @@ def init_google_resources():
                 elif not fid and f["name"] == "LoA_Foto_Peserta": fid = f["id"]
                 elif not lid and f["name"] == "LoA_Sertifikat_DG": lid = f["id"]
                 
+        # Pastikan tab TAB_NAME ada di Google Sheets
+        if s_sht and sid:
+            try:
+                sm = s_sht.spreadsheets().get(spreadsheetId=sid).execute()
+                s_names = [s['properties']['title'] for s in sm.get('sheets', [])]
+                if TAB_NAME not in s_names:
+                    s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]}).execute()
+                    # Inisialisasi header
+                    s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_NAME}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS]}).execute()
+            except Exception:
+                pass
+
         return s_sht, s_drv, sid, fid, lid
-    except Exception as e:
-        st.error(f"DEBUG ERROR init_google_resources: {e}")
+    except Exception:
         return None, None, None, None, None
 
-service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
 
 def upload_file_handler(uploaded_file, folder_id, filename):
     os.makedirs("uploads", exist_ok=True)
