@@ -289,7 +289,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menimpa blangko resmi A4 Landscape template PDF Kemenhub secara presisi tanpa merusak format asli """
+    """ Menutup area teks lama pada template PDF Kemenhub dengan kotak putih bersih dan menimpa data isian secara presisi """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -304,9 +304,22 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
+    # 1. TUTUP TEKS LAMA DENGAN KOTAK PUTIH BERSIH (Agar tidak tumpang tindih)
+    can.setFillColorRGB(1, 1, 1)
+    can.setStrokeColorRGB(1, 1, 1)
+    
+    # Kotak putih untuk menutup area Nama, NIK, Jabatan, Perusahaan lama
+    can.rect(w * 0.40, h * 0.50, w * 0.45, h * 0.18, fill=True, stroke=True)
+    
+    # Kotak putih untuk menutup nomor LoA lama di bawah judul
+    can.rect(w * 0.45, h * 0.74, w * 0.30, h * 0.05, fill=True, stroke=True)
+    
+    # Kotak putih untuk menutup tanggal terbit lama di kanan bawah
+    can.rect(w * 0.58, h * 0.20, w * 0.30, h * 0.06, fill=True, stroke=True)
+
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA: Pas di dalam kotak foto blangko resmi A4 (Kiri)
+    # 2. FOTO PESERTA: Pas di dalam kotak foto blangko resmi (Kiri)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -317,23 +330,22 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            # Koordinat absolut presisi untuk blangko A4 landscape
             can.drawImage(ImageReader(foto_local), w * 0.07, h * 0.355, width=118, height=148)
         except Exception:
             pass
 
-    # 2. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko A4
+    # 3. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko resmi
     can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.63, h * 0.765, f"{no_loa}")
     
-    # 3. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko A4
+    # 4. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko resmi
     can.setFont("Helvetica-Bold", 11)
     can.drawString(w * 0.52, h * 0.647, f"{p.get('nama', '-')}")
     can.drawString(w * 0.52, h * 0.605, f"{p.get('nik_emp', '-')}")
     can.drawString(w * 0.52, h * 0.563, f"{p.get('jabatan', '-')}")
     can.drawString(w * 0.52, h * 0.522, f"{p.get('perusahaan', '-')}")
     
-    # 4. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko A4
+    # 5. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko resmi
     can.setFont("Helvetica-Bold", 18)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
@@ -341,16 +353,16 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.63, h * 0.415, f"{role_str}")
     
-    # 5. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko A4 (Kiri Bawah)
+    # 6. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko resmi (Kiri Bawah)
     can.setFillColorRGB(0, 0, 0)
     can.setFont("Helvetica-Bold", 13)
     can.drawCentredString(w * 0.135, h * 0.105, f"{valid_date_fmt}")
     
-    # 6. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko A4 (Kanan Bawah)
+    # 7. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko resmi (Kanan Bawah)
     can.setFont("Helvetica-Oblique", 11.5)
     can.drawCentredString(w * 0.78, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 7. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko A4 (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
+    # 8. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko resmi (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
         qr = qrcode.QRCode(version=1, box_size=2, border=1)
@@ -478,9 +490,47 @@ if sub_menu == "1. Submit Data LoA (Publik)":
 elif sub_menu == "2. Verifikasi Data Peserta (Admin)":
     st.title("Tahap 2: Verifikasi Dokumen & Kualifikasi Peserta")
     if st.button("🔄 Sinkronkan Data Lokal ke Google Sheets"):
-        success_count = sum(1 for p in st.session_state.get("local_peserta_loa", []) if df_all.empty or str(p["nomor_induk"]) not in df_all["nomor_induk"].astype(str).values and save_new_peserta(p))
-        st.success(f"Berhasil menyinkronkan {success_count} data!")
-        st.cache_data.clear(); st.rerun()
+        local_data = load_local_db()
+        if not local_data:
+            st.warning("⚠️ Tidak ada data lokal di file `peserta_loa_db.json` untuk disinkronkan.")
+        else:
+            success_count = 0
+            fail_count = 0
+            existing_ids = df_all["nomor_induk"].astype(str).tolist() if not df_all.empty and "nomor_induk" in df_all.columns else []
+            
+            for p in local_data:
+                no_induk = str(p.get("nomor_induk", "")).strip()
+                if no_induk not in existing_ids:
+                    if service_sheets and SPREADSHEET_ID:
+                        try:
+                            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+                            sheets = sheet_metadata.get('sheets', '')
+                            sheet_names = [s['properties']['title'] for s in sheets]
+                            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
+                            
+                            rv = [str(p.get(c, ""))[:49000] for c in SHEET_COLUMNS]
+                            service_sheets.spreadsheets().values().append(
+                                spreadsheetId=SPREADSHEET_ID,
+                                range=f"{target_sheet}!A1",
+                                valueInputOption="USER_ENTERED",
+                                insertDataOption="INSERT_ROWS",
+                                body={"values": [rv]}
+                            ).execute()
+                            success_count += 1
+                        except Exception as e:
+                            fail_count += 1
+                            st.error(f"Gagal sync {no_induk}: {e}")
+                    else:
+                        fail_count += 1
+                        st.error("Google Sheets Service tidak aktif / SPREADSHEET_ID kosong.")
+            
+            if success_count > 0:
+                st.success(f"✅ Berhasil menyinkronkan {success_count} data ke Google Sheets!")
+            if fail_count > 0:
+                st.error(f"❌ Gagal menyinkronkan {fail_count} data.")
+            st.cache_data.clear()
+            time.sleep(2)
+            st.rerun()
 
     df_pending = df_all[df_all["status_verifikasi"].astype(str).str.lower() == "pending"] if not df_all.empty and "status_verifikasi" in df_all.columns else pd.DataFrame()
     if df_pending.empty: st.info("Tidak ada berkas yang menunggu verifikasi saat ini.")
