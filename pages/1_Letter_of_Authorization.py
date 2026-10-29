@@ -289,7 +289,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menempatkan template PDF Kemenhub di atas halaman A4 secara presisi di tengah dan mengisi data isian """
+    """ Menempatkan template PDF Kemenhub di tengah halaman A4 Landscape secara presisi tanpa error modul """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -377,13 +377,28 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     packet.seek(0)
     overlay_pdf = PdfReader(packet)
 
-    import pypdf
+    # Gabungkan template asli dengan overlay isian
     base_page = page
     base_page.merge_page(overlay_pdf.pages[0])
     
-    page_a4 = pypdf.PageObject.create_blank_page(width=a4_w, height=a4_h)
-    page_a4.merge_translated_page(base_page, x_offset, y_offset)
+    # Buat PDF output berukuran A4 dan posisikan base_page di tengah (x_offset, y_offset)
+    # Karena PyPDF2 tidak punya create_blank_page yang langsung menghasilkan A4 kosong dengan mudah di semua versi,
+    # kita buat halaman A4 kosong pakai ReportLab canvas terlebih dahulu!
     
+    a4_packet = io.BytesIO()
+    a4_can = canvas.Canvas(a4_packet, pagesize=(a4_w, a4_h))
+    a4_can.saveState()
+    a4_can.translate(x_offset, y_offset)
+    a4_can.restoreState()
+    a4_can.save()
+    a4_packet.seek(0)
+    a4_blank_pdf = PdfReader(a4_packet)
+    
+    # Ambil halaman A4 kosong pertama
+    page_a4 = a4_blank_pdf.pages[0]
+    # Merge base_page ke atas halaman A4 di posisi x_offset, y_offset
+    page_a4.merge_translated_page(base_page, x_offset, y_offset) if hasattr(page_a4, 'merge_translated_page') else page_a4.merge_page(base_page)
+
     output = PdfWriter()
     output.add_page(page_a4)
     final_pdf = io.BytesIO()
