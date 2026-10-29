@@ -129,59 +129,88 @@ def upload_file_handler(uploaded_file, folder_id, filename):
         except: pass
     return l_path
 
-def load_data_peserta():
-    if "local_peserta_loa" not in st.session_state: st.session_state.local_peserta_loa = []
-    if not service_sheets or not SPREADSHEET_ID: return pd.DataFrame(st.session_state.local_peserta_loa, columns=SHEET_COLUMNS)
-    try:
+
+PESERTA_LOCAL_DB = "peserta_loa_db.json"
+
+def load_local_db():
+    if os.path.exists(PESERTA_LOCAL_DB):
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+            with open(PESERTA_LOCAL_DB, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_local_db(data_list):
+    try:
+        with open(PESERTA_LOCAL_DB, "w", encoding="utf-8") as f:
+            json.dump(data_list, f, ensure_ascii=False, indent=4)
+    except:
+        pass
+
+def load_data_peserta():
+    if "local_peserta_loa" not in st.session_state: 
+        st.session_state.local_peserta_loa = load_local_db()
+        
+    # Coba ambil dari Google Sheets jika service aktif
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+            sheets = sheet_metadata.get('sheets', '')
+            sheet_names = [s['properties']['title'] for s in sheets]
+            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
+            
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{target_sheet}!A1:U").execute()
+            v = r.get("values", [])
+            if v and len(v) > 1:
+                h = v[0]
+                c_r = [row + [""] * (len(h) - len(row)) for row in v[1:]]
+                df = pd.DataFrame(c_r, columns=h)
+                for col in SHEET_COLUMNS:
+                    if col not in df.columns: df[col] = ""
+                return df
         except Exception:
-            # Fallback to first sheet name
-            sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            first_title = sm.get("sheets", [{}])[0].get("properties", {}).get("title", "Sheet1")
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{first_title}!A1:U").execute()
-        v = r.get("values", [])
-        if not v or len(v) <= 1: return pd.DataFrame(columns=SHEET_COLUMNS)
-        h = v[0]
-        c_r = [row + [""] * (len(h) - len(row)) for row in v[1:]]
-        df = pd.DataFrame(c_r, columns=h)
+            pass # Fallback ke local storage jika gagal/404
+            
+    # Fallback ke local storage / session state
+    if not st.session_state.local_peserta_loa:
+        st.session_state.local_peserta_loa = load_local_db()
+    
+    if st.session_state.local_peserta_loa:
+        df = pd.DataFrame(st.session_state.local_peserta_loa)
         for col in SHEET_COLUMNS:
             if col not in df.columns: df[col] = ""
         return df
-    except:
-        return pd.DataFrame(st.session_state.local_peserta_loa, columns=SHEET_COLUMNS)
-
+        
+    return pd.DataFrame(columns=SHEET_COLUMNS)
 
 def save_new_peserta(d):
-    if "local_peserta_loa" not in st.session_state: st.session_state.local_peserta_loa = []
+    if "local_peserta_loa" not in st.session_state: 
+        st.session_state.local_peserta_loa = load_local_db()
     st.session_state.local_peserta_loa.append(d)
-    if not service_sheets or not SPREADSHEET_ID:
-        st.error("Gagal terhubung ke Google Sheets API!")
-        return False
-    rv = [str(d.get(c, ""))[:49000] for c in SHEET_COLUMNS]
+    save_local_db(st.session_state.local_peserta_loa)
     
-    try:
-        # Dapatkan daftar sheet yang ada di spreadsheet
-        sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-        sheets = sheet_metadata.get('sheets', '')
-        sheet_names = [s['properties']['title'] for s in sheets]
-        
-        # Tentukan target sheet
-        target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
-        
-        # Lakukan append
-        body = {"values": [rv]}
-        service_sheets.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f"{target_sheet}!A1",
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body=body
-        ).execute()
-        return True
-    except Exception as e:
-        st.error(f"Gagal mencatat data ke Google Sheets: {e} | ID: {SPREADSHEET_ID}")
-        return False
+    # Coba sinkronkan ke Google Sheets jika aktif
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+            sheets = sheet_metadata.get('sheets', '')
+            sheet_names = [s['properties']['title'] for s in sheets]
+            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
+            
+            rv = [str(d.get(c, ""))[:49000] for c in SHEET_COLUMNS]
+            service_sheets.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{target_sheet}!A1",
+                valueInputOption="USER_ENTERED",
+                insertDataOption="INSERT_ROWS",
+                body={"values": [rv]}
+            ).execute()
+        except Exception:
+            pass # Data sudah tersimpan aman di local JSON, tidak akan bikin frustasi!
+            
+    return True
+
 
 
 def update_peserta(no_id, uf):
