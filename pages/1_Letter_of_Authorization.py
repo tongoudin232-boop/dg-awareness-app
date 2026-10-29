@@ -315,7 +315,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menutup teks lama dengan kotak putih solid 100% dan menimpa data isian secara presisi mutlak """
+    """ Menimpa blangko resmi template PDF Kemenhub secara bersih tanpa kotak putih yang merusak background """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -330,19 +330,9 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
-    # 1. TUTUP TOTAL TEKS LAMA DENGAN KOTAK PUTIH SOLID (100% Opaque White)
-    can.setFillColorRGB(1, 1, 1)
-    can.setStrokeColorRGB(1, 1, 1)
+    # 1. Alih-alih kotak putih besar, kita biarkan template asli bersih dan kita timpa teks langsung dengan font tebal dan warna kontras 
+    # di atas koordinat yang disesuaikan persis sehingga menutupi teks lama secara natural tanpa kotak putih!
     
-    # Kotak putih besar untuk menutupi seluruh area tengah dari X=38% sampai X=88%, Y=45% sampai Y=70%
-    can.rect(w * 0.38, h * 0.45, w * 0.50, h * 0.25, fill=True, stroke=True)
-    
-    # Kotak putih untuk menutup nomor LoA lama di bawah judul
-    can.rect(w * 0.45, h * 0.73, w * 0.35, h * 0.07, fill=True, stroke=True)
-    
-    # Kotak putih untuk menutup tanggal terbit lama di kanan bawah
-    can.rect(w * 0.55, h * 0.18, w * 0.38, h * 0.08, fill=True, stroke=True)
-
     can.setFillColorRGB(0, 0, 0)
     
     # 2. FOTO PESERTA: Pas di dalam kotak foto blangko resmi (Kiri)
