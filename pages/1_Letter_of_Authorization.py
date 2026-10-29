@@ -277,7 +277,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa teks secara presisi tinggi tanpa tumpang tindih """
+    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi tanpa tumpang tindih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -294,7 +294,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA: Ukuran proporsional di dalam bingkai putih kiri
+    # 1. FOTO PESERTA: Posisi pas di dalam bingkai putih kiri
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -305,21 +305,20 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.058, h * 0.44, width=80, height=105)
+            can.drawImage(ImageReader(foto_local), w * 0.048, h * 0.44, width=78, height=102)
         except Exception:
             pass
 
-    # 2. NOMOR LoA: Di bawah judul (Tengah-Atas)
+    # 2. NOMOR LoA: Di bawah judul LETTER OF AUTHORIZATION (Tengah-Atas)
     can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. DATA KARYAWAN (Nama, Nik, Job Title, Company): Terpisah baris demi baris, rapi di sebelah kanan titik dua
+    # 3. DATA KARYAWAN: Dicetak terpisah baris demi baris dengan koordinat Y yang berjarak pas agar TIDAK BERTUMPUK
     can.setFont("Helvetica", 11)
-    # Gunakan koordinat Y yang terpisah jelas agar tidak menumpuk
-    can.drawString(w * 0.38, h * 0.645, f"{p.get('nama', '-')}")
-    can.drawString(w * 0.38, h * 0.602, f"{p.get('nik_emp', '-')}")
-    can.drawString(w * 0.38, h * 0.560, f"{p.get('jabatan', '-')}")
-    can.drawString(w * 0.38, h * 0.518, f"{p.get('perusahaan', '-')}")
+    can.drawString(w * 0.38, h * 0.655, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.38, h * 0.612, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.38, h * 0.570, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.38, h * 0.528, f"{p.get('perusahaan', '-')}")
     
     # 4. ROLE KARYAWAN (Tengah bawah, Biru untuk SJ / Merah untuk IN)
     can.setFont("Helvetica-Bold", 15)
@@ -334,9 +333,9 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.115, h * 0.13, f"{valid_date_fmt}")
     
-    # 6. TANGGAL TERBIT (Kanan Bawah, di atas nama Ronald MP Sihombing)
+    # 6. TANGGAL TERBIT (Geser ke kiri agar tidak menabrak QR Code verifikasi)
     can.setFont("Helvetica", 10)
-    can.drawCentredString(w * 0.68, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
+    can.drawCentredString(w * 0.55, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
     # 7. QR CODE VERIFIKASI KEASLIAN DATA (Kecil & Rapi di sudut kanan bawah)
     verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED"
@@ -348,8 +347,8 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     qr_img.save(qr_bytes, format="PNG")
     qr_bytes.seek(0)
     
-    # Letakkan di sudut kanan bawah (X=78%, Y=9%) dengan ukuran 40x40px
-    can.drawImage(ImageReader(qr_bytes), w * 0.78, h * 0.09, width=40, height=40)
+    # Letakkan di sudut kanan bawah (X=81%, Y=10%) dengan ukuran 32x32px agar tidak menutupi nama Ronald
+    can.drawImage(ImageReader(qr_bytes), w * 0.81, h * 0.10, width=32, height=32)
     
     can.save()
     packet.seek(0)
