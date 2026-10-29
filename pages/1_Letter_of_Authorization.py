@@ -277,18 +277,16 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa (stamp) teks NAMA, NIK, QR Code di atasnya persis """
+    """ Membaca template PDF statis dan menimpa (stamp) teks NAMA, NIK, dll dengan presisi tinggi sesuai contoh manual """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
-        # Ambil ukuran halaman dari PDF asli (Biasanya Landscape: lebar > tinggi)
         w = float(page.mediabox.width)
         h = float(page.mediabox.height)
     except Exception as e:
         return None
 
     packet = io.BytesIO()
-    # Buat canvas dengan ukuran persis PDF asli
     can = canvas.Canvas(packet, pagesize=(w, h))
     
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
@@ -296,7 +294,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # Tulis Foto Peserta di bawah logo (Kiri)
+    # 1. Foto Peserta di dalam kotak putih sebelah kiri
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -307,56 +305,47 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            # Stamp foto di koordinat X=12%, Y=42% (Perkiraan di bawah logo Sriwijaya/NAM)
-            # Lebar 70, Tinggi 90 (Proporsi Pas Foto)
-            can.drawImage(ImageReader(foto_local), w * 0.12, h * 0.42, width=70, height=90)
+            # Koordinat presisi untuk kotak putih foto di sebelah kiri bawah logo
+            can.drawImage(ImageReader(foto_local), w * 0.052, h * 0.33, width=125, height=155)
         except Exception:
             pass
 
-    # 1. Nomor LoA: Menimpa nomor yang ada di template (tengah atas)
-    can.setFont("Helvetica-Bold", 14)
-    can.drawCentredString(w * 0.70, h * 0.81, f"{no_loa}")
+    # 2. Nomor LoA: Di bawah judul LETTER OF AUTHORIZATION (Tengah-atas), TANPA QR CODE
+    can.setFont("Helvetica-Bold", 13)
+    can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 2. Data Tabel Karyawan
-    # Kolom teks "Name :" dll ada di sekitar sumbu X=30%, dan Y turun ke bawah.
-    can.setFont("Helvetica-Bold", 14)
-    can.drawString(w * 0.43, h * 0.69, f"{p.get('nama', '-')}") # Nama bold
-    
-    can.setFont("Helvetica", 14)
-    can.drawString(w * 0.43, h * 0.635, f"{p.get('nik_emp', '-')}") # NIK
-    can.drawString(w * 0.43, h * 0.58, f"{p.get('jabatan', '-')}") # Jabatan
-    can.drawString(w * 0.43, h * 0.525, f"{p.get('perusahaan', '-')}") # Company
-    
-    # 3. Role Karyawan (To act on behalf... as a:)
-    can.setFont("Helvetica-Bold", 16)
-    # Warna role: Biru (SJ) atau Merah (NAM)
-    if carrier == "SJ":
-        can.setFillColorRGB(0, 0.12, 0.37)
-    else:
-        can.setFillColorRGB(0.85, 0.01, 0.16)
-    can.drawString(w * 0.30, h * 0.46, f"{role_str}")
-    
-    # 4. Valid Date (Ada di Kiri Bawah di atas awan)
-    can.setFillColorRGB(0, 0, 0)
+    # 3. Data Tabel Karyawan (Sejajar dengan background label Name, Nik, Job Title, Company)
     can.setFont("Helvetica-Bold", 12)
-    can.drawCentredString(w * 0.13, h * 0.19, f"{valid_date_fmt}")
+    can.drawString(w * 0.38, h * 0.645, f": {p.get('nama', '-')}")
+    can.drawString(w * 0.38, h * 0.603, f": {p.get('nik_emp', '-')}")
+    can.drawString(w * 0.38, h * 0.562, f": {p.get('jabatan', '-')}")
+    can.drawString(w * 0.38, h * 0.520, f": {p.get('perusahaan', '-')}")
     
-    # 5. Tanggal Terbit (Di atas nama Ronald MP)
-    can.setFont("Helvetica", 12)
-    can.drawCentredString(w * 0.76, h * 0.18, f"Tangerang, {tgl_terbit_fmt}")
+    # 4. Role Karyawan (Di bawah "To act on behalf of the commercial director as a:")
+    can.setFont("Helvetica-Bold", 16)
+    if carrier == "SJ":
+        can.setFillColorRGB(0, 0.12, 0.37) # Biru Sriwijaya
+    else:
+        can.setFillColorRGB(0.85, 0.01, 0.16) # Merah NAM Air
+    can.drawCentredString(w * 0.58, h * 0.43, f"{role_str}")
     
-    # 6. Tulis QR Code (Pojok Kiri / Kanan Atas)
-    qr_text = f"LETTER OF AUTHORIZATION - PT {'SRIWIJAYA' if carrier=='SJ' else 'NAM'} AIR\nDoc No: {no_loa}\nName: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid Date: {valid_date_fmt}"
-    qr = qrcode.QRCode(version=1, box_size=4, border=1)
-    qr.add_data(qr_text)
-    qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white")
-    qr_bytes = io.BytesIO()
-    qr_img.save(qr_bytes, format="PNG")
-    qr_bytes.seek(0)
+    # 5. Valid Date (Di dalam kotak putih Valid Date pojok kiri bawah)
+    can.setFillColorRGB(0, 0, 0)
+    can.setFont("Helvetica-Bold", 13)
+    can.drawCentredString(w * 0.115, h * 0.135, f"{valid_date_fmt}")
     
-    # Tempel Gambar QR (Karena di pojok kiri atas ada logo SJ/NAM, kita pasang QR di pojok KANAN ATAS)
-    can.drawImage(ImageReader(qr_bytes), w * 0.82, h * 0.75, width=90, height=90)
+    # 6. Tanggal Terbit & Tanda Tangan di kanan bawah (di atas Ronald MP Sihombing)
+    can.setFont("Helvetica", 11)
+    can.drawCentredString(w * 0.74, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
+    
+    # Tanda Tangan tiruan di atas nama Ronald
+    can.setStrokeColorRGB(0.1, 0.2, 0.5)
+    can.setLineWidth(1.5)
+    can.saveState()
+    can.translate(w * 0.65, h * 0.17)
+    can.bezier(10, 5, 25, 25, 40, -5, 55, 15)
+    can.bezier(55, 15, 70, 30, 85, 5, 100, 20)
+    can.restoreState()
     
     can.save()
     packet.seek(0)
