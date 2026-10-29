@@ -133,7 +133,13 @@ def load_data_peserta():
     if "local_peserta_loa" not in st.session_state: st.session_state.local_peserta_loa = []
     if not service_sheets or not SPREADSHEET_ID: return pd.DataFrame(st.session_state.local_peserta_loa, columns=SHEET_COLUMNS)
     try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+        except Exception:
+            # Fallback to first sheet name
+            sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+            first_title = sm.get("sheets", [{}])[0].get("properties", {}).get("title", "Sheet1")
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{first_title}!A1:U").execute()
         v = r.get("values", [])
         if not v or len(v) <= 1: return pd.DataFrame(columns=SHEET_COLUMNS)
         h = v[0]
@@ -145,19 +151,41 @@ def load_data_peserta():
     except:
         return pd.DataFrame(st.session_state.local_peserta_loa, columns=SHEET_COLUMNS)
 
+
 def save_new_peserta(d):
     if "local_peserta_loa" not in st.session_state: st.session_state.local_peserta_loa = []
     st.session_state.local_peserta_loa.append(d)
     if not service_sheets or not SPREADSHEET_ID:
-        st.error("Gagal terhubung ke Google Sheets API!")
+        st.error("Gagal terhubung ke Google Sheets API (service_sheets atau SPREADSHEET_ID kosong)!")
         return False
     rv = [str(d.get(c, ""))[:49000] for c in SHEET_COLUMNS]
-    try:
-        service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
+    
+    success = False
+    err_msg = ""
+    
+    # Coba beberapa variasi range untuk append
+    ranges_to_try = [f"{TAB_NAME}!A1", TAB_NAME, "Sheet1!A1", "Sheet1"]
+    for r_str in ranges_to_try:
+        try:
+            service_sheets.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID, 
+                range=r_str, 
+                valueInputOption="USER_ENTERED", 
+                insertDataOption="INSERT_ROWS", 
+                body={"values": [rv]}
+            ).execute()
+            success = True
+            break
+        except Exception as e:
+            err_msg = str(e)
+            continue
+            
+    if success:
         return True
-    except Exception as e:
-        st.error(f"Gagal mencatat data ke Google Sheets: {e}")
+    else:
+        st.error(f"Gagal mencatat data ke Google Sheets. Detail Error: {err_msg} | Spreadsheet ID: {SPREADSHEET_ID}")
         return False
+
 
 def update_peserta(no_id, uf):
     if "local_peserta_loa" in st.session_state:
