@@ -315,7 +315,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menimpa blangko resmi template PDF Kemenhub secara bersih tanpa kotak putih yang merusak background """
+    """ Menimpa blangko resmi template PDF A4 Landscape Kemenhub secara presisi mutlak tanpa kotak putih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -330,12 +330,9 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
-    # 1. Alih-alih kotak putih besar, kita biarkan template asli bersih dan kita timpa teks langsung dengan font tebal dan warna kontras 
-    # di atas koordinat yang disesuaikan persis sehingga menutupi teks lama secara natural tanpa kotak putih!
-    
     can.setFillColorRGB(0, 0, 0)
     
-    # 2. FOTO PESERTA: Pas di dalam kotak foto blangko resmi (Kiri)
+    # 1. FOTO PESERTA: Pas di dalam kotak foto blangko A4 Landscape (Kiri)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -346,22 +343,23 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.068, h * 0.355, width=118, height=148)
+            # Koordinat absolut skala penuh A4 Landscape untuk foto
+            can.drawImage(ImageReader(foto_local), w * 0.065, h * 0.355, width=130, height=160)
         except Exception:
             pass
 
-    # 3. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko resmi
-    can.setFont("Helvetica-Bold", 12)
+    # 2. NOMOR LoA: Dicetak pas di garis isian nomor LoA A4 Landscape
+    can.setFont("Helvetica-Bold", 13)
     can.drawCentredString(w * 0.63, h * 0.765, f"{no_loa}")
     
-    # 4. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko resmi
-    can.setFont("Helvetica-Bold", 11)
+    # 3. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko A4 Landscape
+    can.setFont("Helvetica-Bold", 11.5)
     can.drawString(w * 0.52, h * 0.647, f"{p.get('nama', '-')}")
     can.drawString(w * 0.52, h * 0.605, f"{p.get('nik_emp', '-')}")
     can.drawString(w * 0.52, h * 0.563, f"{p.get('jabatan', '-')}")
     can.drawString(w * 0.52, h * 0.522, f"{p.get('perusahaan', '-')}")
     
-    # 5. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko resmi
+    # 4. ROLE KARYAWAN: Dicetak di area jabatan penugasan A4 Landscape
     can.setFont("Helvetica-Bold", 18)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
@@ -369,18 +367,19 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.63, h * 0.415, f"{role_str}")
     
-    # 6. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko resmi (Kiri Bawah)
+    # 5. VALID DATE: Dicetak pas di dalam kotak Valid Date A4 Landscape (Kiri Bawah)
     can.setFillColorRGB(0, 0, 0)
-    can.setFont("Helvetica-Bold", 13)
+    can.setFont("Helvetica-Bold", 13.5)
     can.drawCentredString(w * 0.135, h * 0.105, f"{valid_date_fmt}")
     
-    # 7. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko resmi (Kanan Bawah)
-    can.setFont("Helvetica-Oblique", 11.5)
+    # 6. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan A4 Landscape (Kanan Bawah)
+    can.setFont("Helvetica-Oblique", 12)
     can.drawCentredString(w * 0.78, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 8. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko resmi (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
+    # 7. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan A4 Landscape (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
+        import qrcode
         qr = qrcode.QRCode(version=1, box_size=2, border=1)
         qr.add_data(verify_text)
         qr.make(fit=True)
@@ -388,7 +387,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_bytes = io.BytesIO()
         qr_img.save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
-        can.drawImage(ImageReader(qr_bytes), w * 0.74, h * 0.14, width=55, height=55)
+        can.drawImage(ImageReader(qr_bytes), w * 0.74, h * 0.14, width=60, height=60)
     except Exception:
         pass
     
