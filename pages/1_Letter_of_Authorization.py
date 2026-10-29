@@ -6,11 +6,13 @@ import qrcode
 import io
 import os
 import time
+import base64
 import json
 
 try:
     from PyPDF2 import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
     from reportlab.lib.utils import ImageReader
 except ImportError:
     st.error("⚠️ Library 'PyPDF2' dan 'reportlab' belum terinstall. Buka Terminal/CMD dan ketik: `pip install PyPDF2 reportlab qrcode`")
@@ -32,22 +34,16 @@ st.set_page_config(
 DISTRIK_FILE = "distrik_db.json"
 def load_distrik():
     if os.path.exists(DISTRIK_FILE):
-        try:
-            with open(DISTRIK_FILE, "r") as f:
-                return json.load(f)
-        except:
-            pass
+        with open(DISTRIK_FILE, "r") as f:
+            return json.load(f)
     return [
         "CGK - Jakarta", "SUB - Surabaya", "DPS - Denpasar", 
         "KNO - Medan", "UPG - Makassar", "PLM - Palembang"
     ]
 
 def save_distrik(distrik_list):
-    try:
-        with open(DISTRIK_FILE, "w") as f:
-            json.dump(distrik_list, f)
-    except:
-        pass
+    with open(DISTRIK_FILE, "w") as f:
+        json.dump(distrik_list, f)
 
 if "db_distrik" not in st.session_state:
     st.session_state.db_distrik = load_distrik()
@@ -104,27 +100,41 @@ def init_google_resources():
         except Exception:
             pass
             
-        # Cari otomatis atau buat jika ID spreadsheet salah/tidak ada
+        # Validasi apakah sid benar-benar bisa diakses, jika 404 atau kosong, cari otomatis atau buat baru
         spreadsheet_valid = False
         if sid and s_sht:
             try:
                 s_sht.spreadsheets().get(spreadsheetId=sid).execute()
                 spreadsheet_valid = True
             except Exception:
-                pass
+                spreadsheet_valid = False
                 
         if not spreadsheet_valid and s_drv:
+            # Cari spreadsheet "DG_Awareness_Database" di Google Drive
             try:
                 res = s_drv.files().list(pageSize=10, q="name = 'DG_Awareness_Database' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false", fields="files(id, name)").execute()
                 files = res.get("files", [])
                 if files:
                     sid = files[0]["id"]
                 else:
-                    new_sheet = s_sht.spreadsheets().create(body={"properties": {"title": "DG_Awareness_Database"}}, fields="spreadsheetId").execute()
+                    # Buat baru spreadsheet otomatis jika tidak ada
+                    spreadsheet_body = {"properties": {"title": "DG_Awareness_Database"}}
+                    new_sheet = s_sht.spreadsheets().create(body=spreadsheet_body, fields="spreadsheetId").execute()
                     sid = new_sheet.get("spreadsheetId")
             except Exception:
                 pass
 
+        # Pastikan folder foto dan license ada
+        if s_drv and (not fid or not lid):
+            try:
+                res = s_drv.files().list(pageSize=50, q="mimeType = 'application/vnd.google-apps.folder' and trashed = false", fields="files(id, name)").execute()
+                for f in res.get("files", []):
+                    if not fid and f["name"] == "LoA_Foto_Peserta": fid = f["id"]
+                    elif not lid and f["name"] == "LoA_Sertifikat_DG": lid = f["id"]
+            except Exception:
+                pass
+
+        # Pastikan tab TAB_NAME ada di Google Sheets
         if s_sht and sid:
             try:
                 sm = s_sht.spreadsheets().get(spreadsheetId=sid).execute()
@@ -132,14 +142,16 @@ def init_google_resources():
                 if TAB_NAME not in s_names:
                     s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]}).execute()
                     s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_NAME}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS]}).execute()
-            except Exception:
+            except Exception as e:
                 pass
 
         return s_sht, s_drv, sid, fid, lid
-    except Exception:
+    except Exception as e:
         return None, None, None, None, None
 
 service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
+
+
 
 def upload_file_handler(uploaded_file, folder_id, filename):
     os.makedirs("uploads", exist_ok=True)
@@ -154,6 +166,7 @@ def upload_file_handler(uploaded_file, folder_id, filename):
             return f_d.get("webViewLink")
         except: pass
     return l_path
+
 
 PESERTA_LOCAL_DB = "peserta_loa_db.json"
 
@@ -177,6 +190,7 @@ def load_data_peserta():
     if "local_peserta_loa" not in st.session_state: 
         st.session_state.local_peserta_loa = load_local_db()
         
+    # Coba ambil dari Google Sheets jika service aktif
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -194,8 +208,9 @@ def load_data_peserta():
                     if col not in df.columns: df[col] = ""
                 return df
         except Exception:
-            pass 
+            pass # Fallback ke local storage jika gagal/404
             
+    # Fallback ke local storage / session state
     if not st.session_state.local_peserta_loa:
         st.session_state.local_peserta_loa = load_local_db()
     
@@ -208,6 +223,7 @@ def load_data_peserta():
     return pd.DataFrame(columns=SHEET_COLUMNS)
 
 def save_new_peserta(d):
+    # Simpan ke Google Sheets terlebih dahulu sebagai sumber data utama
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -224,14 +240,16 @@ def save_new_peserta(d):
                 body={"values": [rv]}
             ).execute()
         except Exception as e:
-            st.error(f"⚠️ Gagal menyimpan ke Google Sheets: {e}")
+            st.error(f"⚠️ Gagal menyimpan langsung ke Google Sheets: {e}")
             return False
             
+    # Simpan juga ke cache lokal sebagai backup
     if "local_peserta_loa" not in st.session_state: 
         st.session_state.local_peserta_loa = load_local_db()
     st.session_state.local_peserta_loa.append(d)
     save_local_db(st.session_state.local_peserta_loa)
     return True
+
 
 def update_peserta(no_id, uf):
     if "local_peserta_loa" in st.session_state:
@@ -258,7 +276,6 @@ def update_peserta(no_id, uf):
 def delete_peserta_trial(no_id):
     if "local_peserta_loa" in st.session_state:
         st.session_state.local_peserta_loa = [p for p in st.session_state.local_peserta_loa if str(p.get("nomor_induk", "")).strip() != str(no_id).strip()]
-        save_local_db(st.session_state.local_peserta_loa)
     if not service_sheets or not SPREADSHEET_ID: return True
     try:
         r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
@@ -295,27 +312,29 @@ def generate_nomor_loa(df_all, carrier):
     return f"{cl:04d}/LOA/{ct}/{romawi}/{today.year}"
 
 # ---------------------------------------------------------
-# GENERATOR LIVE PDF TAMPING OVERLAY 
+# GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Mencetak teks murni di atas template A4 Landscape asli Kemenhub tanpa merusak desain """
+    """ Menimpa data di ukuran asli template, lalu menempatkannya di TENGAH halaman A4 Landscape kosong """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
-        page = existing_pdf.pages[0]
-        # Mengambil dimensi asli dari template PDF (Karena template adalah A4)
-        w = float(page.mediabox.width)
-        h = float(page.mediabox.height)
+        template_page = existing_pdf.pages[0]
+        # Ukuran asli kartu (kecil)
+        card_w = float(template_page.mediabox.width)
+        card_h = float(template_page.mediabox.height)
     except Exception as e:
         return None
 
+    # TAHAP 1: BUAT OVERLAY DATA UNTUK KARTU KECIL
     packet = io.BytesIO()
-    can = canvas.Canvas(packet, pagesize=(w, h))
+    can = canvas.Canvas(packet, pagesize=(card_w, card_h))
     
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
     can.setFillColorRGB(0, 0, 0)
     
+    # Semua koordinat menggunakan persentase dari card_w dan card_h agar sangat presisi
     # 1. FOTO PESERTA
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
@@ -327,67 +346,96 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.08, h * 0.40, width=120, height=150)
+            can.drawImage(ImageReader(foto_local), card_w * 0.068, card_h * 0.355, width=card_w*0.28, height=card_h*0.35)
         except Exception:
             pass
 
     # 2. NOMOR LoA
-    can.setFont("Helvetica-Bold", 14)
-    can.drawCentredString(w * 0.65, h * 0.78, f"{no_loa}")
-    
-    # 3. DATA KARYAWAN: Disesuaikan koordinat X ke 0.60 agar tidak menabrak teks "Name :" dll.
-    text_x = w * 0.60
     can.setFont("Helvetica-Bold", 12)
-    can.drawString(text_x, h * 0.640, f"{p.get('nama', '-')}")
-    can.drawString(text_x, h * 0.600, f"{p.get('nik_emp', '-')}")
-    can.drawString(text_x, h * 0.560, f"{p.get('jabatan', '-')}")
-    can.drawString(text_x, h * 0.520, f"{p.get('perusahaan', '-')}")
+    can.drawCentredString(card_w * 0.63, card_h * 0.77, f"{no_loa}")
+    
+    # 3. DATA KARYAWAN: Kita geser koordinat X ke 0.59 agar benar-benar aman dari titik dua lama
+    #    dan kita beri spasi Y yang pas
+    can.setFont("Helvetica-Bold", 11)
+    can.drawString(card_w * 0.59, card_h * 0.635, f"{p.get('nama', '-')}")
+    can.drawString(card_w * 0.59, card_h * 0.595, f"{p.get('nik_emp', '-')}")
+    can.drawString(card_w * 0.59, card_h * 0.555, f"{p.get('jabatan', '-')}")
+    can.drawString(card_w * 0.59, card_h * 0.515, f"{p.get('perusahaan', '-')}")
     
     # 4. ROLE KARYAWAN
-    can.setFont("Helvetica-Bold", 20)
+    can.setFont("Helvetica-Bold", 18)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
     else:
         can.setFillColorRGB(0.85, 0.01, 0.16)
-    can.drawCentredString(w * 0.65, h * 0.415, f"{role_str}")
+    can.drawCentredString(card_w * 0.63, card_h * 0.415, f"{role_str}")
     
     # 5. VALID DATE
     can.setFillColorRGB(0, 0, 0)
-    can.setFont("Helvetica-Bold", 14)
-    can.drawCentredString(w * 0.15, h * 0.13, f"{valid_date_fmt}")
+    can.setFont("Helvetica-Bold", 13)
+    can.drawCentredString(card_w * 0.135, card_h * 0.105, f"{valid_date_fmt}")
     
     # 6. TANGGAL TERBIT
-    can.setFont("Helvetica-Oblique", 12)
-    can.drawCentredString(w * 0.80, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
+    can.setFont("Helvetica-Oblique", 11.5)
+    can.drawCentredString(card_w * 0.78, card_h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
     # 7. QR CODE VERIFIKASI
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
-        qr = qrcode.QRCode(version=1, box_size=3, border=1)
+        import qrcode
+        qr = qrcode.QRCode(version=1, box_size=2, border=1)
         qr.add_data(verify_text)
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
         qr_bytes = io.BytesIO()
         qr_img.save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
-        can.drawImage(ImageReader(qr_bytes), w * 0.76, h * 0.08, width=70, height=70)
+        can.drawImage(ImageReader(qr_bytes), card_w * 0.74, card_h * 0.14, width=card_w*0.12, height=card_h*0.18)
     except Exception:
         pass
     
     can.save()
     packet.seek(0)
-    new_pdf = PdfReader(packet)
+    overlay_pdf = PdfReader(packet)
     
+    # Gabungkan overlay dengan template asli (Kartu sudah utuh dengan isi)
+    template_page.merge_page(overlay_pdf.pages[0])
+
+    # TAHAP 2: TEMPEL KARTU YANG SUDAH JADI KE TENGAH HALAMAN A4 LANDSCAPE
+    from reportlab.lib.pagesizes import A4, landscape
+    a4_w, a4_h = landscape(A4)
+    
+    a4_packet = io.BytesIO()
+    a4_can = canvas.Canvas(a4_packet, pagesize=(a4_w, a4_h))
+    
+    # Gambar elemen bantuan jika perlu, tapi kita butuh halaman A4 kosong
+    a4_can.drawString(0, 0, "") 
+    a4_can.save()
+    a4_packet.seek(0)
+    
+    a4_pdf = PdfReader(a4_packet)
+    a4_page = a4_pdf.pages[0]
+    
+    # Hitung titik tengah A4 untuk menaruh kartu
+    x_offset = (a4_w - card_w) / 2
+    y_offset = (a4_h - card_h) / 2
+    
+    # Tempelkan kartu di tengah halaman A4
+    # Karena pypdf > 3.0 menggunakan add_transformation
+    from pypdf import Transformation
+    op = Transformation().translate(tx=x_offset, ty=y_offset)
+    template_page.add_transformation(op)
+    a4_page.merge_page(template_page)
+
     try:
         output = PdfWriter()
-        # Merge layer teks baru secara mulus di atas template asli Kemenhub
-        page.merge_page(new_pdf.pages[0])
-        output.add_page(page)
+        output.add_page(a4_page)
         final_pdf = io.BytesIO()
         output.write(final_pdf)
         return final_pdf.getvalue()
     except Exception as e:
         return None
+
 
 SOAL_UJIAN_RESMI = [
     {"no": 1, "q": "Klasifikasi Dangerous Goods dibagi menjadi?", "options": ["a) 1 class", "b) 7 Class", "c) 9 Class", "d) 8 Class"], "a": "c) 9 Class"},
