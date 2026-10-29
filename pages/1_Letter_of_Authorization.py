@@ -34,16 +34,22 @@ st.set_page_config(
 DISTRIK_FILE = "distrik_db.json"
 def load_distrik():
     if os.path.exists(DISTRIK_FILE):
-        with open(DISTRIK_FILE, "r") as f:
-            return json.load(f)
+        try:
+            with open(DISTRIK_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
     return [
         "CGK - Jakarta", "SUB - Surabaya", "DPS - Denpasar", 
         "KNO - Medan", "UPG - Makassar", "PLM - Palembang"
     ]
 
 def save_distrik(distrik_list):
-    with open(DISTRIK_FILE, "w") as f:
-        json.dump(distrik_list, f)
+    try:
+        with open(DISTRIK_FILE, "w") as f:
+            json.dump(distrik_list, f)
+    except:
+        pass
 
 if "db_distrik" not in st.session_state:
     st.session_state.db_distrik = load_distrik()
@@ -114,7 +120,6 @@ def init_google_resources():
                 s_names = [s['properties']['title'] for s in sm.get('sheets', [])]
                 if TAB_NAME not in s_names:
                     s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]}).execute()
-                    # Inisialisasi header
                     s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_NAME}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS]}).execute()
             except Exception:
                 pass
@@ -124,8 +129,6 @@ def init_google_resources():
         return None, None, None, None, None
 
 service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
-
-
 
 def upload_file_handler(uploaded_file, folder_id, filename):
     os.makedirs("uploads", exist_ok=True)
@@ -140,7 +143,6 @@ def upload_file_handler(uploaded_file, folder_id, filename):
             return f_d.get("webViewLink")
         except: pass
     return l_path
-
 
 PESERTA_LOCAL_DB = "peserta_loa_db.json"
 
@@ -164,7 +166,6 @@ def load_data_peserta():
     if "local_peserta_loa" not in st.session_state: 
         st.session_state.local_peserta_loa = load_local_db()
         
-    # Coba ambil dari Google Sheets jika service aktif
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -181,10 +182,9 @@ def load_data_peserta():
                 for col in SHEET_COLUMNS:
                     if col not in df.columns: df[col] = ""
                 return df
-        except Exception:
-            pass # Fallback ke local storage jika gagal/404
+        except Exception as e:
+            st.warning(f"⚠️ Menggunakan cache lokal (Koneksi Sheets: {e})")
             
-    # Fallback ke local storage / session state
     if not st.session_state.local_peserta_loa:
         st.session_state.local_peserta_loa = load_local_db()
     
@@ -197,7 +197,6 @@ def load_data_peserta():
     return pd.DataFrame(columns=SHEET_COLUMNS)
 
 def save_new_peserta(d):
-    # Simpan ke Google Sheets terlebih dahulu sebagai sumber data utama
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -214,57 +213,61 @@ def save_new_peserta(d):
                 body={"values": [rv]}
             ).execute()
         except Exception as e:
-            st.error(f"⚠️ Gagal menyimpan langsung ke Google Sheets: {e}")
+            st.error(f"❌ Gagal menyimpan ke Google Sheets: {e}")
             return False
             
-    # Simpan juga ke cache lokal sebagai backup
     if "local_peserta_loa" not in st.session_state: 
         st.session_state.local_peserta_loa = load_local_db()
     st.session_state.local_peserta_loa.append(d)
     save_local_db(st.session_state.local_peserta_loa)
     return True
 
-
 def update_peserta(no_id, uf):
     if "local_peserta_loa" in st.session_state:
         for p in st.session_state.local_peserta_loa:
             if str(p.get("nomor_induk", "")).strip() == str(no_id).strip(): p.update(uf)
-    if not service_sheets or not SPREADSHEET_ID: return True
-    try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
-        v = r.get("values", [])
-        if not v: return False
-        h = v[0]
-        ri = -1
-        for i, row in enumerate(v):
-            if row and str(row[0]).strip() == str(no_id).strip(): ri = i + 1; break
-        if ri != -1:
-            for fd, val in uf.items():
-                if fd in h:
-                    cl = chr(ord('A') + h.index(fd))
-                    service_sheets.spreadsheets().values().update(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!{cl}{ri}", valueInputOption="USER_ENTERED", body={"values": [[str(val)[:49000]]]}).execute()
-            return True
-        return False
-    except: return False
+            
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+            v = r.get("values", [])
+            if v:
+                h = v[0]
+                ri = -1
+                for i, row in enumerate(v):
+                    if row and str(row[0]).strip() == str(no_id).strip(): ri = i + 1; break
+                if ri != -1:
+                    for fd, val in uf.items():
+                        if fd in h:
+                            cl = chr(ord('A') + h.index(fd))
+                            service_sheets.spreadsheets().values().update(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!{cl}{ri}", valueInputOption="USER_ENTERED", body={"values": [[str(val)[:49000]]]}).execute()
+                    return True
+        except Exception as e:
+            st.error(f"❌ Gagal update Google Sheets: {e}")
+            return False
+    return True
 
 def delete_peserta_trial(no_id):
     if "local_peserta_loa" in st.session_state:
         st.session_state.local_peserta_loa = [p for p in st.session_state.local_peserta_loa if str(p.get("nomor_induk", "")).strip() != str(no_id).strip()]
-    if not service_sheets or not SPREADSHEET_ID: return True
-    try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
-        v = r.get("values", [])
-        if not v: return False
-        ri = -1
-        for i, row in enumerate(v):
-            if row and str(row[0]).strip() == str(no_id).strip(): ri = i + 1; break
-        if ri != -1:
-            sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sid = next(s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME)
-            service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri - 1, "endIndex": ri}}}]}).execute()
-            return True
-        return False
-    except: return False
+        save_local_db(st.session_state.local_peserta_loa)
+        
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+            v = r.get("values", [])
+            if v:
+                ri = -1
+                for i, row in enumerate(v):
+                    if row and str(row[0]).strip() == str(no_id).strip(): ri = i + 1; break
+                if ri != -1:
+                    sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+                    sid = next(s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME)
+                    service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri - 1, "endIndex": ri}}}]}).execute()
+                    return True
+        except Exception:
+            pass
+    return True
 
 def generate_nomor_induk(df_all):
     prefix = f"LOA{date.today().strftime('%m%y')}"
@@ -286,13 +289,31 @@ def generate_nomor_loa(df_all, carrier):
     return f"{cl:04d}/LOA/{ct}/{romawi}/{today.year}"
 
 # ---------------------------------------------------------
-# GENERATOR LIVE PDF TAMPING OVERLAY
+# GENERATOR LIVE PDF TAMPING OVERLAY (VECTOR-LEVEL STRIPPING)
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menutup area teks lama pada template PDF Kemenhub secara total dan presisi mutlak tanpa tumpang tindih """
+    """ Membersihkan text layer bawaan template PDF di tingkat operator stream, menjaga latar belakang estetik 100% utuh tanpa kotak putih """
     try:
-        existing_pdf = PdfReader(open(template_path, "rb"))
-        page = existing_pdf.pages[0]
+        reader = PdfReader(open(template_path, "rb"))
+        page = reader.pages[0]
+        
+        # 1. Bersihkan operator teks bawaan (BT ... ET / Tj / TJ) dari content stream PDF agar tidak bertumpuk
+        if "/Contents" in page:
+            contents = page["/Contents"]
+            if hasattr(contents, "get_object"):
+                content_obj = contents.get_object()
+                if isinstance(content_obj, list):
+                    for sub in content_obj:
+                        sub_obj = sub.get_object()
+                        data = sub_obj.get_data()
+                        # Hapus string operator teks lama dari stream vektor
+                        cleaned_data = b"\n".join([line for line in data.split(b"\n") if not any(op in line for op in [b"TJ", b"Tj", b"\\("])])
+                        sub_obj.set_data(cleaned_data)
+                else:
+                    data = content_obj.get_data()
+                    cleaned_data = b"\n".join([line for line in data.split(b"\n") if not any(op in line for op in [b"TJ", b"Tj", b"\\("])])
+                    content_obj.set_data(cleaned_data)
+                    
         w = float(page.mediabox.width)
         h = float(page.mediabox.height)
     except Exception as e:
@@ -304,22 +325,9 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
-    # 1. TUTUP TOTAL SEMUA TEKS LAMA DI TEMPLATE ASLI DENGAN KOTAK PUTIH SOLID
-    can.setFillColorRGB(1, 1, 1)
-    can.setStrokeColorRGB(1, 1, 1)
-    
-    # Kotak putih untuk menutup area teks Nama, NIK, Jabatan, Perusahaan lama secara penuh
-    can.rect(w * 0.40, h * 0.48, w * 0.48, h * 0.22, fill=True, stroke=True)
-    
-    # Kotak putih untuk menutup nomor LoA lama di bawah judul
-    can.rect(w * 0.45, h * 0.74, w * 0.35, h * 0.06, fill=True, stroke=True)
-    
-    # Kotak putih untuk menutup tanggal terbit lama di kanan bawah
-    can.rect(w * 0.55, h * 0.19, w * 0.35, h * 0.07, fill=True, stroke=True)
-
     can.setFillColorRGB(0, 0, 0)
     
-    # 2. FOTO PESERTA: Pas di dalam kotak foto blangko resmi (Kiri)
+    # 1. FOTO PESERTA: Pas di dalam kotak foto blangko resmi (Kiri)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -330,22 +338,22 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.068, h * 0.355, width=118, height=148)
+            can.drawImage(ImageReader(foto_local), w * 0.07, h * 0.355, width=118, height=148)
         except Exception:
             pass
 
-    # 3. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko resmi
+    # 2. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko resmi
     can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.63, h * 0.765, f"{no_loa}")
     
-    # 4. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko resmi
+    # 3. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko resmi
     can.setFont("Helvetica-Bold", 11)
     can.drawString(w * 0.52, h * 0.647, f"{p.get('nama', '-')}")
     can.drawString(w * 0.52, h * 0.605, f"{p.get('nik_emp', '-')}")
     can.drawString(w * 0.52, h * 0.563, f"{p.get('jabatan', '-')}")
     can.drawString(w * 0.52, h * 0.522, f"{p.get('perusahaan', '-')}")
     
-    # 5. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko resmi
+    # 4. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko resmi
     can.setFont("Helvetica-Bold", 18)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
@@ -353,16 +361,16 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.63, h * 0.415, f"{role_str}")
     
-    # 6. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko resmi (Kiri Bawah)
+    # 5. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko resmi (Kiri Bawah)
     can.setFillColorRGB(0, 0, 0)
     can.setFont("Helvetica-Bold", 13)
     can.drawCentredString(w * 0.135, h * 0.105, f"{valid_date_fmt}")
     
-    # 7. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko resmi (Kanan Bawah)
+    # 6. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko resmi (Kanan Bawah)
     can.setFont("Helvetica-Oblique", 11.5)
     can.drawCentredString(w * 0.78, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 8. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko resmi (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
+    # 7. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko resmi (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
         qr = qrcode.QRCode(version=1, box_size=2, border=1)
@@ -389,7 +397,6 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         return final_pdf.getvalue()
     except Exception as e:
         return None
-
 
 SOAL_UJIAN_RESMI = [
     {"no": 1, "q": "Klasifikasi Dangerous Goods dibagi menjadi?", "options": ["a) 1 class", "b) 7 Class", "c) 9 Class", "d) 8 Class"], "a": "c) 9 Class"},
@@ -476,14 +483,14 @@ if sub_menu == "1. Submit Data LoA (Publik)":
             elif not df_all.empty and "nik_emp" in df_all.columns and nik_emp in df_all["nik_emp"].astype(str).values: st.warning("NIK ini sudah terdaftar!")
             else:
                 nomor_induk = generate_nomor_induk(df_all)
-                with st.spinner("Menyimpan berkas pendaftaran..."):
+                with st.spinner("Menyimpan berkas pendaftaran ke Google Sheets..."):
                     ext_foto = os.path.splitext(foto_merah.name)[1] or ".png"
                     ext_cert = os.path.splitext(foto_cert.name)[1] or ".pdf"
                     url_foto = upload_file_handler(foto_merah, FOLDER_FOTO_ID, f"FOTO_{nomor_induk}_{nama}{ext_foto}")
                     url_license = upload_file_handler(foto_cert, FOLDER_LICENSE_ID, f"CERT_{nomor_induk}_{nama}{ext_cert}")
                     record_baru = {"nomor_induk": nomor_induk, "nama": nama, "nik_emp": nik_emp, "jabatan": jabatan, "kategori": kategori, "role": role_dg, "perusahaan": perusahaan, "no_hp": no_hp, "distrik": distrik, "exp_dg_cert": str(exp_dg_cert), "url_foto": url_foto, "url_license": url_license, "tgl_submit": str(date.today()), "status_verifikasi": "Pending", "catatan_admin": "", "status_ujian": "Belum Ujian", "nilai": 0, "tgl_ujian": "", "loa_valid_until": "", "no_loa_in": "", "no_loa_sj": ""}
                     if save_new_peserta(record_baru):
-                        st.success("✅ Berkas berhasil terkirim!")
+                        st.success("✅ Berkas berhasil dikirim dan tersimpan permanen di Google Sheets!")
                         st.info(f"🎫 Nomor Induk Resmi Anda: **{nomor_induk}**. Harap dicatat!")
                         st.cache_data.clear()
 
@@ -492,45 +499,15 @@ elif sub_menu == "2. Verifikasi Data Peserta (Admin)":
     if st.button("🔄 Sinkronkan Data Lokal ke Google Sheets"):
         local_data = load_local_db()
         if not local_data:
-            st.warning("⚠️ Tidak ada data lokal di file `peserta_loa_db.json` untuk disinkronkan.")
+            st.warning("⚠️ Tidak ada data lokal untuk disinkronkan.")
         else:
             success_count = 0
-            fail_count = 0
             existing_ids = df_all["nomor_induk"].astype(str).tolist() if not df_all.empty and "nomor_induk" in df_all.columns else []
-            
             for p in local_data:
-                no_induk = str(p.get("nomor_induk", "")).strip()
-                if no_induk not in existing_ids:
-                    if service_sheets and SPREADSHEET_ID:
-                        try:
-                            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-                            sheets = sheet_metadata.get('sheets', '')
-                            sheet_names = [s['properties']['title'] for s in sheets]
-                            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
-                            
-                            rv = [str(p.get(c, ""))[:49000] for c in SHEET_COLUMNS]
-                            service_sheets.spreadsheets().values().append(
-                                spreadsheetId=SPREADSHEET_ID,
-                                range=f"{target_sheet}!A1",
-                                valueInputOption="USER_ENTERED",
-                                insertDataOption="INSERT_ROWS",
-                                body={"values": [rv]}
-                            ).execute()
-                            success_count += 1
-                        except Exception as e:
-                            fail_count += 1
-                            st.error(f"Gagal sync {no_induk}: {e}")
-                    else:
-                        fail_count += 1
-                        st.error("Google Sheets Service tidak aktif / SPREADSHEET_ID kosong.")
-            
-            if success_count > 0:
-                st.success(f"✅ Berhasil menyinkronkan {success_count} data ke Google Sheets!")
-            if fail_count > 0:
-                st.error(f"❌ Gagal menyinkronkan {fail_count} data.")
-            st.cache_data.clear()
-            time.sleep(2)
-            st.rerun()
+                if str(p.get("nomor_induk")) not in existing_ids:
+                    if save_new_peserta(p): success_count += 1
+            st.success(f"Berhasil menyinkronkan {success_count} data ke Google Sheets!")
+            st.cache_data.clear(); st.rerun()
 
     df_pending = df_all[df_all["status_verifikasi"].astype(str).str.lower() == "pending"] if not df_all.empty and "status_verifikasi" in df_all.columns else pd.DataFrame()
     if df_pending.empty: st.info("Tidak ada berkas yang menunggu verifikasi saat ini.")
