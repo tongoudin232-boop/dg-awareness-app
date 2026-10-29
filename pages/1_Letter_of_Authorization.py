@@ -416,16 +416,23 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     a4_pdf = PdfReader(a4_packet)
     a4_page = a4_pdf.pages[0]
     
-    # Hitung titik tengah A4 untuk menaruh kartu
+# Hitung titik tengah A4 untuk menaruh kartu
     x_offset = (a4_w - card_w) / 2
     y_offset = (a4_h - card_h) / 2
     
-    # Tempelkan kartu di tengah halaman A4
-    # Karena pypdf > 3.0 menggunakan add_transformation
-    from pypdf import Transformation
-    op = Transformation().translate(tx=x_offset, ty=y_offset)
-    template_page.add_transformation(op)
-    a4_page.merge_page(template_page)
+    # Tempelkan kartu di tengah halaman A4 menggunakan metode yang kompatibel dengan semua versi PyPDF2
+    if hasattr(a4_page, 'merge_translated_page'):
+        a4_page.merge_translated_page(template_page, float(x_offset), float(y_offset))
+    elif hasattr(a4_page, 'mergeTranslatedPage'):
+        a4_page.mergeTranslatedPage(template_page, float(x_offset), float(y_offset))
+    else:
+        try:
+            from PyPDF2 import Transformation
+            op = Transformation().translate(tx=float(x_offset), ty=float(y_offset))
+            template_page.add_transformation(op)
+            a4_page.merge_page(template_page)
+        except Exception:
+            a4_page.merge_page(template_page)
 
     try:
         output = PdfWriter()
