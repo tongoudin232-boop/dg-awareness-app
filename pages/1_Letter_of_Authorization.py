@@ -129,7 +129,6 @@ def upload_file_handler(uploaded_file, folder_id, filename):
         except: pass
     return l_path
 
-
 PESERTA_LOCAL_DB = "peserta_loa_db.json"
 
 def load_local_db():
@@ -152,7 +151,6 @@ def load_data_peserta():
     if "local_peserta_loa" not in st.session_state: 
         st.session_state.local_peserta_loa = load_local_db()
         
-    # Coba ambil dari Google Sheets jika service aktif
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -170,9 +168,8 @@ def load_data_peserta():
                     if col not in df.columns: df[col] = ""
                 return df
         except Exception:
-            pass # Fallback ke local storage jika gagal/404
+            pass
             
-    # Fallback ke local storage / session state
     if not st.session_state.local_peserta_loa:
         st.session_state.local_peserta_loa = load_local_db()
     
@@ -190,7 +187,6 @@ def save_new_peserta(d):
     st.session_state.local_peserta_loa.append(d)
     save_local_db(st.session_state.local_peserta_loa)
     
-    # Coba sinkronkan ke Google Sheets jika aktif
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -207,11 +203,9 @@ def save_new_peserta(d):
                 body={"values": [rv]}
             ).execute()
         except Exception:
-            pass # Data sudah tersimpan aman di local JSON, tidak akan bikin frustasi!
+            pass
             
     return True
-
-
 
 def update_peserta(no_id, uf):
     if "local_peserta_loa" in st.session_state:
@@ -274,10 +268,9 @@ def generate_nomor_loa(df_all, carrier):
     return f"{cl:04d}/LOA/{ct}/{romawi}/{today.year}"
 
 # ---------------------------------------------------------
-# GENERATOR LIVE PDF TAMPING OVERLAY
+# GENERATOR LIVE PDF TAMPING OVERLAY (ZERO-OVERLAP FIX)
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi tanpa tumpang tindih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -294,7 +287,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA: Di bawah logo Sriwijaya/NAM Air, ukuran proporsional (width=65, height=85)
+    # 1. Foto Peserta di bawah logo (Kiri)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -309,18 +302,18 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         except Exception:
             pass
 
-    # 2. NOMOR LoA: Font Bold, ukuran 10pt
+    # 2. Nomor LoA (10pt, Bold)
     can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. DATA KARYAWAN (Name - Company): Tepat di sebelah kanan titik dua (X = 42%) agar tidak menimpa label asli
+    # 3. Data Karyawan: Dicetak terpisah baris demi baris di X = 42% (sebelah kanan titik dua)
     can.setFont("Helvetica-Bold", 10)
     can.drawString(w * 0.42, h * 0.620, f"{p.get('nama', '-')}")
     can.drawString(w * 0.42, h * 0.582, f"{p.get('nik_emp', '-')}")
     can.drawString(w * 0.42, h * 0.544, f"{p.get('jabatan', '-')}")
     can.drawString(w * 0.42, h * 0.506, f"{p.get('perusahaan', '-')}")
     
-    # 4. ROLE KARYAWAN: Font Bold, ukuran 12pt (Biru untuk SJ, Merah untuk IN)
+    # 4. Role Karyawan (12pt, Bold, Biru/Merah)
     can.setFont("Helvetica-Bold", 12)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
@@ -328,16 +321,16 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.setFillColorRGB(0.85, 0.01, 0.16)
     can.drawCentredString(w * 0.58, h * 0.40, f"{role_str}")
     
-    # 5. VALID DATE: Diperkecil sizenya (10pt)
+    # 5. Valid Date (10pt, Bold)
     can.setFillColorRGB(0, 0, 0)
     can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.115, h * 0.13, f"{valid_date_fmt}")
     
-    # 6. TEMPAT, TANGGAL: Font Semi-Bold Italics (Oblique), ukuran 9.5pt
+    # 6. Tempat & Tanggal (9.5pt, Semi-Bold Italics / Oblique)
     can.setFont("Helvetica-Oblique", 9.5)
     can.drawCentredString(w * 0.62, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 7. QR CODE VERIFIKASI KEASLIAN DATA (Kecil & Rapi di sudut kanan bawah, tidak menutupi nama Ronald)
+    # 7. QR Code Verifikasi Keaslian (Kecil & Rapi di Sudut Kanan Bawah)
     verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED"
     qr = qrcode.QRCode(version=1, box_size=2, border=1)
     qr.add_data(verify_text)
