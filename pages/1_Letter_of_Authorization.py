@@ -277,7 +277,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi tanpa tumpang tindih """
+    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi secara presisi mutlak tanpa tumpang tindih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -294,7 +294,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA: Posisi pas di dalam bingkai putih kiri
+    # 1. FOTO PESERTA: Di bawah logo Sriwijaya/NAM Air, diperkecil ukurannya (width=70, height=92)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -305,39 +305,39 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.048, h * 0.44, width=78, height=102)
+            can.drawImage(ImageReader(foto_local), w * 0.05, h * 0.50, width=70, height=92)
         except Exception:
             pass
 
-    # 2. NOMOR LoA: Di bawah judul LETTER OF AUTHORIZATION (Tengah-Atas)
-    can.setFont("Helvetica-Bold", 12)
+    # 2. NOMOR LoA: Diperkecil sizenya (10pt)
+    can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. DATA KARYAWAN: Dicetak terpisah baris demi baris dengan koordinat Y yang berjarak pas agar TIDAK BERTUMPUK
-    can.setFont("Helvetica", 11)
-    can.drawString(w * 0.38, h * 0.655, f"{p.get('nama', '-')}")
-    can.drawString(w * 0.38, h * 0.612, f"{p.get('nik_emp', '-')}")
-    can.drawString(w * 0.38, h * 0.570, f"{p.get('jabatan', '-')}")
-    can.drawString(w * 0.38, h * 0.528, f"{p.get('perusahaan', '-')}")
+    # 3. DATA KARYAWAN (Name - Company): Diperkecil sizenya (10pt) & koordinat Y terpisah rapi tanpa bertumpuk
+    can.setFont("Helvetica", 10)
+    can.drawString(w * 0.38, h * 0.620, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.38, h * 0.582, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.38, h * 0.544, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.38, h * 0.506, f"{p.get('perusahaan', '-')}")
     
-    # 4. ROLE KARYAWAN (Tengah bawah, Biru untuk SJ / Merah untuk IN)
-    can.setFont("Helvetica-Bold", 15)
+    # 4. ROLE KARYAWAN: Diperkecil sizenya (12pt)
+    can.setFont("Helvetica-Bold", 12)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
     else:
         can.setFillColorRGB(0.85, 0.01, 0.16)
-    can.drawCentredString(w * 0.58, h * 0.425, f"{role_str}")
+    can.drawCentredString(w * 0.58, h * 0.40, f"{role_str}")
     
-    # 5. VALID DATE: Di pojok kiri bawah (di dalam kotak putih)
+    # 5. VALID DATE: Diperkecil sizenya
     can.setFillColorRGB(0, 0, 0)
-    can.setFont("Helvetica-Bold", 12)
+    can.setFont("Helvetica-Bold", 10)
     can.drawCentredString(w * 0.115, h * 0.13, f"{valid_date_fmt}")
     
-    # 6. TANGGAL TERBIT (Geser ke kiri agar tidak menabrak QR Code verifikasi)
-    can.setFont("Helvetica", 10)
+    # 6. TEMPAT, TANGGAL: Diperkecil sizenya (9.5pt)
+    can.setFont("Helvetica-Oblique", 9.5)
     can.drawCentredString(w * 0.55, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 7. QR CODE VERIFIKASI KEASLIAN DATA (Kecil & Rapi di sudut kanan bawah)
+    # 7. QR CODE VERIFIKASI KEASLIAN DATA (Kecil & Rapi di sudut kanan bawah, tidak menutupi nama Ronald)
     verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED"
     qr = qrcode.QRCode(version=1, box_size=2, border=1)
     qr.add_data(verify_text)
@@ -347,7 +347,6 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     qr_img.save(qr_bytes, format="PNG")
     qr_bytes.seek(0)
     
-    # Letakkan di sudut kanan bawah (X=81%, Y=10%) dengan ukuran 32x32px agar tidak menutupi nama Ronald
     can.drawImage(ImageReader(qr_bytes), w * 0.81, h * 0.10, width=32, height=32)
     
     can.save()
