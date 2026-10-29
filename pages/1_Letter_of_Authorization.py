@@ -277,7 +277,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa (stamp) teks NAMA, NIK, dll dengan presisi tinggi sesuai contoh manual """
+    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi tanda tangan """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -294,7 +294,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. Foto Peserta di dalam kotak putih sebelah kiri
+    # 1. FOTO PESERTA: Ukuran proporsional & posisi pas di kotak putih sebelah kiri (X=6.5%, Y=46%)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -305,47 +305,50 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            # Koordinat presisi untuk kotak putih foto di sebelah kiri bawah logo
-            can.drawImage(ImageReader(foto_local), w * 0.052, h * 0.33, width=125, height=155)
+            can.drawImage(ImageReader(foto_local), w * 0.065, h * 0.46, width=95, height=120)
         except Exception:
             pass
 
-    # 2. Nomor LoA: Di bawah judul LETTER OF AUTHORIZATION (Tengah-atas), TANPA QR CODE
-    can.setFont("Helvetica-Bold", 13)
+    # 2. NOMOR LoA: Di bawah judul LETTER OF AUTHORIZATION (Tengah-Atas)
+    can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. Data Tabel Karyawan (Sejajar dengan background label Name, Nik, Job Title, Company)
-    can.setFont("Helvetica-Bold", 12)
-    can.drawString(w * 0.38, h * 0.645, f": {p.get('nama', '-')}")
-    can.drawString(w * 0.38, h * 0.603, f": {p.get('nik_emp', '-')}")
-    can.drawString(w * 0.38, h * 0.562, f": {p.get('jabatan', '-')}")
-    can.drawString(w * 0.38, h * 0.520, f": {p.get('perusahaan', '-')}")
+    # 3. DATA KARYAWAN (Nama, Nik, Job Title, Company): Pas di sebelah kanan titik dua (:)
+    can.setFont("Helvetica", 11)
+    can.drawString(w * 0.38, h * 0.647, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.38, h * 0.605, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.38, h * 0.563, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.38, h * 0.522, f"{p.get('perusahaan', '-')}")
     
-    # 4. Role Karyawan (Di bawah "To act on behalf of the commercial director as a:")
-    can.setFont("Helvetica-Bold", 16)
+    # 4. ROLE KARYAWAN (Tengah bawah, warna Biru untuk SJ atau Merah untuk IN)
+    can.setFont("Helvetica-Bold", 15)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37) # Biru Sriwijaya
     else:
         can.setFillColorRGB(0.85, 0.01, 0.16) # Merah NAM Air
     can.drawCentredString(w * 0.58, h * 0.43, f"{role_str}")
     
-    # 5. Valid Date (Di dalam kotak putih Valid Date pojok kiri bawah)
+    # 5. VALID DATE: Di dalam kotak putih pojok kiri bawah
     can.setFillColorRGB(0, 0, 0)
-    can.setFont("Helvetica-Bold", 13)
+    can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.115, h * 0.135, f"{valid_date_fmt}")
     
-    # 6. Tanggal Terbit & Tanda Tangan di kanan bawah (di atas Ronald MP Sihombing)
+    # 6. TANGGAL TERBIT (Kanan Bawah)
     can.setFont("Helvetica", 11)
     can.drawCentredString(w * 0.74, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
     
-    # Tanda Tangan tiruan di atas nama Ronald
-    can.setStrokeColorRGB(0.1, 0.2, 0.5)
-    can.setLineWidth(1.5)
-    can.saveState()
-    can.translate(w * 0.65, h * 0.17)
-    can.bezier(10, 5, 25, 25, 40, -5, 55, 15)
-    can.bezier(55, 15, 70, 30, 85, 5, 100, 20)
-    can.restoreState()
+    # 7. QR CODE VERIFIKASI KEASLIAN DATA (Menggantikan tanda tangan di atas nama Ronald MP Sihombing)
+    verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED & AUTHENTICATED"
+    qr = qrcode.QRCode(version=1, box_size=3, border=1)
+    qr.add_data(verify_text)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+    qr_bytes = io.BytesIO()
+    qr_img.save(qr_bytes, format="PNG")
+    qr_bytes.seek(0)
+    
+    # Posisi QR Code verifikasi tepat di atas nama Ronald MP Sihombing (Kanan Bawah)
+    can.drawImage(ImageReader(qr_bytes), w * 0.70, h * 0.08, width=65, height=65)
     
     can.save()
     packet.seek(0)
