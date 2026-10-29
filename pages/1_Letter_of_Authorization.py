@@ -277,7 +277,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi tanda tangan """
+    """ Membaca template PDF statis dan menimpa teks, foto, serta QR Code verifikasi dengan presisi mutlak """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -294,7 +294,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA: Ukuran proporsional & posisi pas di kotak putih sebelah kiri (X=6.5%, Y=46%)
+    # 1. FOTO PESERTA: Proporsional & rapi di dalam kotak putih sebelah kiri
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -305,7 +305,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.065, h * 0.46, width=95, height=120)
+            can.drawImage(ImageReader(foto_local), w * 0.055, h * 0.46, width=85, height=110)
         except Exception:
             pass
 
@@ -313,7 +313,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     can.setFont("Helvetica-Bold", 12)
     can.drawCentredString(w * 0.58, h * 0.77, f"{no_loa}")
     
-    # 3. DATA KARYAWAN (Nama, Nik, Job Title, Company): Pas di sebelah kanan titik dua (:)
+    # 3. DATA KARYAWAN (Nama, Nik, Job Title, Company): Tepat di sebelah kanan titik dua (:)
     can.setFont("Helvetica", 11)
     can.drawString(w * 0.38, h * 0.647, f"{p.get('nama', '-')}")
     can.drawString(w * 0.38, h * 0.605, f"{p.get('nik_emp', '-')}")
@@ -337,9 +337,9 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     can.setFont("Helvetica", 11)
     can.drawCentredString(w * 0.74, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 7. QR CODE VERIFIKASI KEASLIAN DATA (Menggantikan tanda tangan di atas nama Ronald MP Sihombing)
+    # 7. QR CODE VERIFIKASI KEASLIAN DATA (Ukurannya pas, elegan di atas nama Ronald MP Sihombing)
     verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED & AUTHENTICATED"
-    qr = qrcode.QRCode(version=1, box_size=3, border=1)
+    qr = qrcode.QRCode(version=1, box_size=2, border=1)
     qr.add_data(verify_text)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white")
@@ -347,8 +347,8 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     qr_img.save(qr_bytes, format="PNG")
     qr_bytes.seek(0)
     
-    # Posisi QR Code verifikasi tepat di atas nama Ronald MP Sihombing (Kanan Bawah)
-    can.drawImage(ImageReader(qr_bytes), w * 0.70, h * 0.08, width=65, height=65)
+    # Posisi QR Code verifikasi tepat di atas nama Ronald MP Sihombing (Kanan Bawah, ukuran 45x45px agar rapi)
+    can.drawImage(ImageReader(qr_bytes), w * 0.715, h * 0.10, width=45, height=45)
     
     can.save()
     packet.seek(0)
