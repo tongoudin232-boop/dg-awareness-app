@@ -197,12 +197,7 @@ def load_data_peserta():
     return pd.DataFrame(columns=SHEET_COLUMNS)
 
 def save_new_peserta(d):
-    if "local_peserta_loa" not in st.session_state: 
-        st.session_state.local_peserta_loa = load_local_db()
-    st.session_state.local_peserta_loa.append(d)
-    save_local_db(st.session_state.local_peserta_loa)
-    
-    # Coba sinkronkan ke Google Sheets jika aktif
+    # Simpan ke Google Sheets terlebih dahulu sebagai sumber data utama
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -218,11 +213,16 @@ def save_new_peserta(d):
                 insertDataOption="INSERT_ROWS",
                 body={"values": [rv]}
             ).execute()
-        except Exception:
-            pass # Data sudah tersimpan aman di local JSON, tidak akan bikin frustasi!
+        except Exception as e:
+            st.error(f"⚠️ Gagal menyimpan langsung ke Google Sheets: {e}")
+            return False
             
+    # Simpan juga ke cache lokal sebagai backup
+    if "local_peserta_loa" not in st.session_state: 
+        st.session_state.local_peserta_loa = load_local_db()
+    st.session_state.local_peserta_loa.append(d)
+    save_local_db(st.session_state.local_peserta_loa)
     return True
-
 
 
 def update_peserta(no_id, uf):
@@ -289,33 +289,24 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menempatkan template PDF Kemenhub di tengah halaman A4 Landscape secara presisi tanpa error modul """
+    """ Menimpa blangko resmi A4 Landscape template PDF Kemenhub secara presisi tanpa merusak format asli """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
-        card_w = float(page.mediabox.width)
-        card_h = float(page.mediabox.height)
+        w = float(page.mediabox.width)
+        h = float(page.mediabox.height)
     except Exception as e:
         return None
 
-    from reportlab.lib.pagesizes import A4, landscape
-    a4_w, a4_h = landscape(A4)
-
     packet = io.BytesIO()
-    can = canvas.Canvas(packet, pagesize=(a4_w, a4_h))
+    can = canvas.Canvas(packet, pagesize=(w, h))
     
-    x_offset = (a4_w - card_w) / 2
-    y_offset = (a4_h - card_h) / 2
-
-    can.saveState()
-    can.translate(x_offset, y_offset)
-
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
     can.setFillColorRGB(0, 0, 0)
     
-    # 1. FOTO PESERTA
+    # 1. FOTO PESERTA: Pas di dalam kotak foto blangko resmi A4 (Kiri)
     import glob
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
@@ -326,39 +317,40 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), card_w * 0.07, card_h * 0.355, width=118, height=148)
+            # Koordinat absolut presisi untuk blangko A4 landscape
+            can.drawImage(ImageReader(foto_local), w * 0.07, h * 0.355, width=118, height=148)
         except Exception:
             pass
 
-    # 2. NOMOR LoA
+    # 2. NOMOR LoA: Dicetak pas di garis isian nomor LoA blangko A4
+    can.setFont("Helvetica-Bold", 12)
+    can.drawCentredString(w * 0.63, h * 0.765, f"{no_loa}")
+    
+    # 3. NILAI ISIAN DATA KARYAWAN: Dicetak pas di sebelah kanan titik dua blangko A4
     can.setFont("Helvetica-Bold", 11)
-    can.drawCentredString(card_w * 0.58, card_h * 0.765, f"{no_loa}")
+    can.drawString(w * 0.52, h * 0.647, f"{p.get('nama', '-')}")
+    can.drawString(w * 0.52, h * 0.605, f"{p.get('nik_emp', '-')}")
+    can.drawString(w * 0.52, h * 0.563, f"{p.get('jabatan', '-')}")
+    can.drawString(w * 0.52, h * 0.522, f"{p.get('perusahaan', '-')}")
     
-    # 3. DATA KARYAWAN
-    can.setFont("Helvetica-Bold", 10)
-    can.drawString(card_w * 0.42, card_h * 0.647, f"{p.get('nama', '-')}")
-    can.drawString(card_w * 0.42, card_h * 0.605, f"{p.get('nik_emp', '-')}")
-    can.drawString(card_w * 0.42, card_h * 0.563, f"{p.get('jabatan', '-')}")
-    can.drawString(card_w * 0.42, card_h * 0.522, f"{p.get('perusahaan', '-')}")
-    
-    # 4. ROLE KARYAWAN
-    can.setFont("Helvetica-Bold", 15)
+    # 4. ROLE KARYAWAN: Dicetak di area jabatan penugasan blangko A4
+    can.setFont("Helvetica-Bold", 18)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
     else:
         can.setFillColorRGB(0.85, 0.01, 0.16)
-    can.drawCentredString(card_w * 0.58, card_h * 0.415, f"{role_str}")
+    can.drawCentredString(w * 0.63, h * 0.415, f"{role_str}")
     
-    # 5. VALID DATE
+    # 5. VALID DATE: Dicetak pas di dalam kotak Valid Date blangko A4 (Kiri Bawah)
     can.setFillColorRGB(0, 0, 0)
-    can.setFont("Helvetica-Bold", 12)
-    can.drawCentredString(card_w * 0.135, card_h * 0.105, f"{valid_date_fmt}")
+    can.setFont("Helvetica-Bold", 13)
+    can.drawCentredString(w * 0.135, h * 0.105, f"{valid_date_fmt}")
     
-    # 6. TANGGAL TERBIT
-    can.setFont("Helvetica-Oblique", 11)
-    can.drawCentredString(card_w * 0.74, card_h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
+    # 6. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko A4 (Kanan Bawah)
+    can.setFont("Helvetica-Oblique", 11.5)
+    can.drawCentredString(w * 0.78, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
     
-    # 7. QR CODE VERIFIKASI
+    # 7. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko A4 (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
         qr = qrcode.QRCode(version=1, box_size=2, border=1)
@@ -368,42 +360,23 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_bytes = io.BytesIO()
         qr_img.save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
-        can.drawImage(ImageReader(qr_bytes), card_w * 0.70, card_h * 0.16, width=48, height=48)
+        can.drawImage(ImageReader(qr_bytes), w * 0.74, h * 0.15, width=55, height=55)
     except Exception:
         pass
     
-    can.restoreState()
     can.save()
     packet.seek(0)
-    overlay_pdf = PdfReader(packet)
-
-    # Gabungkan template asli dengan overlay isian
-    base_page = page
-    base_page.merge_page(overlay_pdf.pages[0])
+    new_pdf = PdfReader(packet)
     
-    # Buat PDF output berukuran A4 dan posisikan base_page di tengah (x_offset, y_offset)
-    # Karena PyPDF2 tidak punya create_blank_page yang langsung menghasilkan A4 kosong dengan mudah di semua versi,
-    # kita buat halaman A4 kosong pakai ReportLab canvas terlebih dahulu!
-    
-    a4_packet = io.BytesIO()
-    a4_can = canvas.Canvas(a4_packet, pagesize=(a4_w, a4_h))
-    a4_can.saveState()
-    a4_can.translate(x_offset, y_offset)
-    a4_can.restoreState()
-    a4_can.save()
-    a4_packet.seek(0)
-    a4_blank_pdf = PdfReader(a4_packet)
-    
-    # Ambil halaman A4 kosong pertama
-    page_a4 = a4_blank_pdf.pages[0]
-    # Merge base_page ke atas halaman A4 di posisi x_offset, y_offset
-    page_a4.merge_translated_page(base_page, x_offset, y_offset) if hasattr(page_a4, 'merge_translated_page') else page_a4.merge_page(base_page)
-
-    output = PdfWriter()
-    output.add_page(page_a4)
-    final_pdf = io.BytesIO()
-    output.write(final_pdf)
-    return final_pdf.getvalue()
+    try:
+        output = PdfWriter()
+        page.merge_page(new_pdf.pages[0])
+        output.add_page(page)
+        final_pdf = io.BytesIO()
+        output.write(final_pdf)
+        return final_pdf.getvalue()
+    except Exception as e:
+        return None
 
 
 SOAL_UJIAN_RESMI = [
