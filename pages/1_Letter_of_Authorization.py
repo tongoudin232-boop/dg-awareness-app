@@ -156,34 +156,31 @@ def save_new_peserta(d):
     if "local_peserta_loa" not in st.session_state: st.session_state.local_peserta_loa = []
     st.session_state.local_peserta_loa.append(d)
     if not service_sheets or not SPREADSHEET_ID:
-        st.error("Gagal terhubung ke Google Sheets API (service_sheets atau SPREADSHEET_ID kosong)!")
+        st.error("Gagal terhubung ke Google Sheets API!")
         return False
     rv = [str(d.get(c, ""))[:49000] for c in SHEET_COLUMNS]
     
-    success = False
-    err_msg = ""
-    
-    # Coba beberapa variasi range untuk append
-    ranges_to_try = [f"{TAB_NAME}!A1", TAB_NAME, "Sheet1!A1", "Sheet1"]
-    for r_str in ranges_to_try:
-        try:
-            service_sheets.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID, 
-                range=r_str, 
-                valueInputOption="USER_ENTERED", 
-                insertDataOption="INSERT_ROWS", 
-                body={"values": [rv]}
-            ).execute()
-            success = True
-            break
-        except Exception as e:
-            err_msg = str(e)
-            continue
-            
-    if success:
+    try:
+        # Dapatkan daftar sheet yang ada di spreadsheet
+        sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+        sheets = sheet_metadata.get('sheets', '')
+        sheet_names = [s['properties']['title'] for s in sheets]
+        
+        # Tentukan target sheet
+        target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
+        
+        # Lakukan append
+        body = {"values": [rv]}
+        service_sheets.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{target_sheet}!A1",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body=body
+        ).execute()
         return True
-    else:
-        st.error(f"Gagal mencatat data ke Google Sheets. Detail Error: {err_msg} | Spreadsheet ID: {SPREADSHEET_ID}")
+    except Exception as e:
+        st.error(f"Gagal mencatat data ke Google Sheets: {e} | ID: {SPREADSHEET_ID}")
         return False
 
 
