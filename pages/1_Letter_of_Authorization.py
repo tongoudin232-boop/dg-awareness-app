@@ -71,25 +71,17 @@ def get_credentials():
             creds_info = dict(st.secrets)
             
         if not creds_info or "private_key" not in creds_info:
-            st.error("DEBUG: st.secrets kosong atau tidak ada gcp_service_account!")
             return None
 
         if "private_key" in creds_info:
             pk = str(creds_info["private_key"])
-            # Tangani berbagai macam format newline (
- atau literal 
-)
-            pk = pk.replace("\n", "
-").replace("
-", "
-")
+            pk = pk.replace("\\n", "\n")
             creds_info["private_key"] = pk.strip()
             
         return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     except Exception as e:
-        st.error(f"DEBUG GET_CREDENTIALS EXCEPTION: {e}")
+        st.error(f"Error Credentials: {e}")
         return None
-
 
 def init_google_resources():
     creds = get_credentials()
