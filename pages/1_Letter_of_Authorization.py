@@ -123,6 +123,9 @@ def init_google_resources():
     except Exception:
         return None, None, None, None, None
 
+service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
+
+
 
 def upload_file_handler(uploaded_file, folder_id, filename):
     os.makedirs("uploads", exist_ok=True)
