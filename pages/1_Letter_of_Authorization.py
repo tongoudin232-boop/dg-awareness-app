@@ -289,7 +289,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Menutup area teks lama pada template PDF Kemenhub dengan kotak putih bersih dan menimpa data isian secara presisi """
+    """ Menutup area teks lama pada template PDF Kemenhub secara total dan presisi mutlak tanpa tumpang tindih """
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
         page = existing_pdf.pages[0]
@@ -304,18 +304,18 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     no_loa = p.get('no_loa_sj', '-') if carrier == "SJ" else p.get('no_loa_in', '-')
     role_str = str(p.get('role', '-')).upper()
     
-    # 1. TUTUP TEKS LAMA DENGAN KOTAK PUTIH BERSIH (Agar tidak tumpang tindih)
+    # 1. TUTUP TOTAL SEMUA TEKS LAMA DI TEMPLATE ASLI DENGAN KOTAK PUTIH SOLID
     can.setFillColorRGB(1, 1, 1)
     can.setStrokeColorRGB(1, 1, 1)
     
-    # Kotak putih untuk menutup area Nama, NIK, Jabatan, Perusahaan lama
-    can.rect(w * 0.40, h * 0.50, w * 0.45, h * 0.18, fill=True, stroke=True)
+    # Kotak putih untuk menutup area teks Nama, NIK, Jabatan, Perusahaan lama secara penuh
+    can.rect(w * 0.40, h * 0.48, w * 0.48, h * 0.22, fill=True, stroke=True)
     
     # Kotak putih untuk menutup nomor LoA lama di bawah judul
-    can.rect(w * 0.45, h * 0.74, w * 0.30, h * 0.05, fill=True, stroke=True)
+    can.rect(w * 0.45, h * 0.74, w * 0.35, h * 0.06, fill=True, stroke=True)
     
     # Kotak putih untuk menutup tanggal terbit lama di kanan bawah
-    can.rect(w * 0.58, h * 0.20, w * 0.30, h * 0.06, fill=True, stroke=True)
+    can.rect(w * 0.55, h * 0.19, w * 0.35, h * 0.07, fill=True, stroke=True)
 
     can.setFillColorRGB(0, 0, 0)
     
@@ -330,7 +330,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     if foto_local and os.path.exists(foto_local):
         try:
-            can.drawImage(ImageReader(foto_local), w * 0.07, h * 0.355, width=118, height=148)
+            can.drawImage(ImageReader(foto_local), w * 0.068, h * 0.355, width=118, height=148)
         except Exception:
             pass
 
@@ -360,7 +360,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     
     # 7. TANGGAL TERBIT: Dicetak pas di atas nama penandatangan blangko resmi (Kanan Bawah)
     can.setFont("Helvetica-Oblique", 11.5)
-    can.drawCentredString(w * 0.78, h * 0.23, f"Tangerang, {tgl_terbit_fmt}")
+    can.drawCentredString(w * 0.78, h * 0.22, f"Tangerang, {tgl_terbit_fmt}")
     
     # 8. QR CODE VERIFIKASI: Ditempatkan pas di area tanda tangan blangko resmi (menggantikan tanda tangan di atas nama Ronald MP Sihombing)
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
@@ -372,7 +372,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_bytes = io.BytesIO()
         qr_img.save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
-        can.drawImage(ImageReader(qr_bytes), w * 0.74, h * 0.15, width=55, height=55)
+        can.drawImage(ImageReader(qr_bytes), w * 0.74, h * 0.14, width=55, height=55)
     except Exception:
         pass
     
