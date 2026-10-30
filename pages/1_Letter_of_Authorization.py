@@ -8,6 +8,7 @@ import os
 import time
 import base64
 import json
+import urllib.request
 
 try:
     from PyPDF2 import PdfReader, PdfWriter, Transformation
@@ -77,7 +78,7 @@ def get_credentials():
 
         if "private_key" in creds_info:
             pk = str(creds_info["private_key"])
-            pk = pk.replace("\n", "\n")
+            pk = pk.replace("\\n", "\n")
             creds_info["private_key"] = pk.strip()
             
         return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
@@ -149,7 +150,6 @@ def init_google_resources():
 service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
 
 
-
 def upload_file_handler(uploaded_file, folder_id, filename):
     os.makedirs("uploads", exist_ok=True)
     safe_fn = "".join(c for c in filename if c.isalnum() or c in ("_", "-", ".")).rstrip()
@@ -163,7 +163,6 @@ def upload_file_handler(uploaded_file, folder_id, filename):
             return f_d.get("webViewLink")
         except: pass
     return l_path
-
 
 PESERTA_LOCAL_DB = "peserta_loa_db.json"
 
@@ -308,7 +307,7 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Memperbesar template asli menjadi A4 Penuh dan menempatkan teks dengan koordinat presisi final """
+    """ Memperbesar template asli menjadi A4 Penuh dan menempatkan teks dengan koordinat presisi super final """
     try:
         from PyPDF2 import PdfReader, PdfWriter, Transformation
         from reportlab.pdfgen import canvas
@@ -386,7 +385,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
             direct_url = foto_url
             if "drive.google.com/file/d/" in foto_url:
                 fid = foto_url.split("/file/d/")[1].split("/")[0]
-                direct_url = f"https://drive.google.com/uc?id={fid}"
+                direct_url = f"https://drive.google.com/uc?export=download&id={fid}"
             req = urllib.request.Request(direct_url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5) as response:
                 img_data = io.BytesIO(response.read())
@@ -397,42 +396,40 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         try:
             can.drawImage(ImageReader(img_data), foto_x, foto_y, width=foto_w, height=foto_h)
         except Exception:
-            pass
+            pass # Hilangkan border abu-abu agar tidak mengganggu jika foto kosong
     else:
-        pass 
+        pass # Hilangkan tulisan "FOTO TIDAK DITEMUKAN" dan kotaknya
 
     # 1. NOMOR LoA
     can.setFont(font_utama, 14) 
     can.drawCentredString(a4_w * 0.62, a4_h * 0.84, f"{no_loa}")
     
-    # 2. DATA KARYAWAN
-    # Tadi isian bergeser turun 1 baris (Name kosong, Nik diisi nama). 
-    # Sekarang Y dinaikkan persis 1 baris ke atas. X=0.50 sudah pas.
-    data_x = a4_w * 0.50 
-    can.setFont(font_utama, 18) # Size 18 sangat solid dan terbaca jelas
+    # 2. DATA KARYAWAN: "name - company geser lagi ke kiri", "sejajarkan textnya dengan [:]"
+    data_x = a4_w * 0.44 
+    can.setFont(font_utama, 20) 
     can.drawString(data_x, a4_h * 0.675, f"{p.get('nama', '-')}")
     can.drawString(data_x, a4_h * 0.630, f"{p.get('nik_emp', '-')}")
     can.drawString(data_x, a4_h * 0.585, f"{p.get('jabatan', '-')}")
     can.drawString(data_x, a4_h * 0.540, f"{p.get('perusahaan', '-')}")
     
-    # 3. ROLE KARYAWAN (Tadi menabrak teks bawah, sekarang dinaikkan ke Y=0.41)
+    # 3. ROLE KARYAWAN: "role kurang tengah" (antara "To act..." dan "This letter...")
     can.setFont(font_utama, 26)
     if carrier == "SJ":
         can.setFillColorRGB(0, 0.12, 0.37)
     else:
         can.setFillColorRGB(0.85, 0.01, 0.16)
-    can.drawCentredString(a4_w * 0.63, a4_h * 0.41, f"{role_str}")
+    can.drawCentredString(a4_w * 0.63, a4_h * 0.38, f"{role_str}")
     
     # 6. VALID DATE VALUE
     can.setFillColorRGB(0, 0, 0)
     can.setFont(font_utama, 18)
     can.drawCentredString(a4_w * 0.14, a4_h * 0.13, f"{valid_date_fmt}")
     
-    # TANGGAL TERBIT (Tadi menabrak teks "This letter...", diturunkan ke Y=0.28)
+    # TANGGAL TERBIT: "kota dan tanggal terbit harus center dengan ronald mp sihombing"
     can.setFont(font_tgl, 12) 
-    can.drawCentredString(a4_w * 0.72, a4_h * 0.28, f"Tangerang, {tgl_terbit_fmt}")
+    can.drawCentredString(a4_w * 0.745, a4_h * 0.30, f"Tangerang, {tgl_terbit_fmt}")
     
-    # QR CODE VERIFIKASI (Disusun rapi antara tgl dan Ronald)
+    # QR CODE VERIFIKASI: "perbesar sedikit diantara kota dan ronald mp sihombing"
     verify_text = "VERIFIKASI RESMI LOA\nNo: " + no_loa + "\nNama: " + p.get('nama', '-') + "\nNIK: " + p.get('nik_emp', '-') + "\nRole: " + role_str + "\nValid: " + valid_date_fmt + "\nStatus: VERIFIED"
     try:
         import qrcode
@@ -444,8 +441,8 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_img.save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
         
-        qr_size = a4_w * 0.10 # Dikecilkan sedikit agar pas
-        qr_x = (a4_w * 0.72) - (qr_size / 2) 
+        qr_size = a4_w * 0.115 # Diperbesar
+        qr_x = (a4_w * 0.745) - (qr_size / 2) 
         qr_y = a4_h * 0.165 
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size)
     except Exception:
