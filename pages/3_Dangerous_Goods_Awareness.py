@@ -25,73 +25,6 @@ from materi_module import render_materi_module
 
 # ==================== KONFIGURASI HALAMAN ====================
 
-# ==============================================================================
-# ROBUST GOOGLE SHEETS CONNECTION OVERRIDE
-# ==============================================================================
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-
-@st.cache_resource
-def get_google_services():
-    try:
-        creds_info = dict(st.secrets["gcp_service_account"]) if "gcp_service_account" in st.secrets else dict(st.secrets)
-        if "private_key" in creds_info:
-            creds_info["private_key"] = str(creds_info["private_key"]).replace("\\n", "\n")
-        creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-        s_drv = build("drive", "v3", credentials=creds, cache_discovery=False)
-        s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
-        
-        sid = ""
-        try:
-            sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip()
-        except:
-            pass
-            
-        if not sid:
-            res = s_drv.files().list(pageSize=10, q="name = 'DG_Awareness_Database' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false", fields="files(id, name)").execute()
-            files = res.get("files", [])
-            if files: sid = files[0]["id"]
-            
-        return s_sht, sid
-    except Exception as e:
-        st.error(f"Koneksi Google API Gagal: {e}")
-        return None, None
-
-def get_training_records_override():
-    s_sht, sid = get_google_services()
-    if not s_sht or not sid: return pd.DataFrame()
-    try:
-        r = s_sht.spreadsheets().values().get(spreadsheetId=sid, range="training_records!A1:Z").execute()
-        v = r.get("values", [])
-        if not v or len(v) < 2: return pd.DataFrame()
-        headers = v[0]
-        rows = [row + [""] * (len(headers) - len(row)) for row in v[1:]]
-        return pd.DataFrame(rows, columns=headers)
-    except Exception as e:
-        st.error(f"Gagal membaca training_records: {e}")
-        return pd.DataFrame()
-
-def get_districts_override():
-    s_sht, sid = get_google_services()
-    if not s_sht or not sid: return pd.DataFrame()
-    try:
-        r = s_sht.spreadsheets().values().get(spreadsheetId=sid, range="districts!A1:Z").execute()
-        v = r.get("values", [])
-        if not v or len(v) < 2: return pd.DataFrame()
-        headers = v[0]
-        rows = [row + [""] * (len(headers) - len(row)) for row in v[1:]]
-        return pd.DataFrame(rows, columns=headers)
-    except Exception as e:
-        st.error(f"Gagal membaca districts: {e}")
-        return pd.DataFrame()
-
-# Override the imported functions!
-get_training_records = get_training_records_override
-get_districts = get_districts_override
-# ==============================================================================
-
 st.set_page_config(
     page_title="DG Awareness Training - SJ & IN",
     layout="wide",
@@ -577,7 +510,8 @@ elif menu == "Dashboard Instruktur & Records":
             st.caption("Membersihkan cache internal agar data Google Sheets termutakhir langsung terbaca.")
             if st.button("🔄 Refresh Data Cache", type="primary"):
                 reset_cert_sequence()
-                st.cache_data.clear() # Added to clear all cached dataframes!
+                st.cache_data.clear()
+                st.cache_resource.clear() # Added to clear all cached dataframes!
                 st.success("✅ Cache berhasil dibersihkan!")
                 st.rerun()
 
