@@ -25,6 +25,101 @@ from materi_module import render_materi_module
 
 # ==================== KONFIGURASI HALAMAN ====================
 
+
+# ==============================================================================
+# ROBUST GOOGLE SHEETS CONNECTION OVERRIDE (SYNCED WITH LOA)
+# ==============================================================================
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+import json
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
+@st.cache_resource
+def get_loa_credentials():
+    try:
+        if "gcp_service_account" in st.secrets:
+            creds_info = dict(st.secrets["gcp_service_account"])
+        else:
+            creds_info = dict(st.secrets)
+            
+        if not creds_info or "private_key" not in creds_info:
+            return None
+
+        if "private_key" in creds_info:
+            pk = str(creds_info["private_key"])
+            pk = pk.replace("\\n", "\n").replace("\n", "\n")
+            creds_info["private_key"] = pk.strip()
+            
+        return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    except Exception as e:
+        st.error(f"Credentials Error: {e}")
+        return None
+
+@st.cache_resource
+def get_loa_services():
+    creds = get_loa_credentials()
+    if not creds: return None, ""
+    try:
+        s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
+        sid = ""
+        try:
+            if "google_drive" in st.secrets:
+                sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip()
+        except:
+            pass
+            
+        if not sid:
+            s_drv = build("drive", "v3", credentials=creds, cache_discovery=False)
+            res = s_drv.files().list(pageSize=10, q="name = 'DG_Awareness_Database' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false", fields="files(id, name)").execute()
+            files = res.get("files", [])
+            if files: sid = files[0]["id"]
+            
+        return s_sht, sid
+    except Exception as e:
+        st.error(f"Service Error: {e}")
+        return None, ""
+
+def get_training_records_override():
+    s_sht, sid = get_loa_services()
+    if not s_sht or not sid: return pd.DataFrame()
+    try:
+        r = s_sht.spreadsheets().values().get(spreadsheetId=sid, range="training_records!A1:Z").execute()
+        v = r.get("values", [])
+        if not v or len(v) < 2: return pd.DataFrame()
+        headers = v[0]
+        rows = [row + [""] * (len(headers) - len(row)) for row in v[1:]]
+        return pd.DataFrame(rows, columns=headers)
+    except Exception as e:
+        if "404" in str(e) or "not found" in str(e).lower() or "Unable to parse range" in str(e):
+            st.error("❌ Gagal membaca tab 'training_records': Tab tidak ditemukan ATAU email Service Account (di st.secrets) belum di-invite ke Google Sheets ini.")
+            st.info("💡 Pastikan nama tab persis 'training_records' dan Anda telah Share sheet ini ke email service account Anda.")
+        else:
+            st.error(f"Error membaca training_records: {e}")
+        return pd.DataFrame()
+
+def get_districts_override():
+    s_sht, sid = get_loa_services()
+    if not s_sht or not sid: return pd.DataFrame()
+    try:
+        r = s_sht.spreadsheets().values().get(spreadsheetId=sid, range="districts!A1:Z").execute()
+        v = r.get("values", [])
+        if not v or len(v) < 2: return pd.DataFrame()
+        headers = v[0]
+        rows = [row + [""] * (len(headers) - len(row)) for row in v[1:]]
+        return pd.DataFrame(rows, columns=headers)
+    except Exception as e:
+        if "404" in str(e) or "not found" in str(e).lower() or "Unable to parse range" in str(e):
+            st.error("❌ Gagal membaca tab 'districts': Tab tidak ditemukan ATAU email Service Account belum di-invite.")
+        else:
+            st.error(f"Error membaca districts: {e}")
+        return pd.DataFrame()
+
+# Terapkan fungsi override secara paksa
+get_training_records = get_training_records_override
+get_districts = get_districts_override
+# ==============================================================================
+
 st.set_page_config(
     page_title="DG Awareness Training - SJ & IN",
     layout="wide",
