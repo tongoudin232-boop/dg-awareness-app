@@ -34,44 +34,22 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL: Lenyapkan Fork/Github tanpa meruntuhkan Header!
+# CSS FINAL: Aman untuk Mobile (Hanya sembunyikan kanan, warnai kiri)
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* 1. Hilangkan Fork, Github, dan Deploy Badge bawaan Cloud */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+    }
     .viewerBadge_container__1QSob,
     .viewerBadge_link__1S137,
-    div[class*="viewerBadge"],
-    div[class*="stAppDeployButton"] {
+    .viewerBadge_text__1JaDK {
         display: none !important;
-    }
-    
-    /* 2. Sembunyikan HANYA anak-anak (isi) dari toolbar kanan agar header tidak kempis */
-    [data-testid="stToolbar"] > * {
-        display: none !important;
-    }
-    
-    /* 3. Paksa Header dan Menu Garis Tiga agar selalu muncul, plus warna biru dongker */
-    [data-testid="stHeader"] {
-        display: block !important;
-        visibility: visible !important;
-    }
-    [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        z-index: 999999 !important;
-        background-color: #0b1d3a !important; 
-        border-radius: 8px !important;
-        padding: 6px !important;
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.2) !important;
-        margin-top: 5px !important;
-        margin-left: 5px !important;
     }
     [data-testid="collapsedControl"] svg {
-        fill: #ffffff !important;
-        color: #ffffff !important;
+        color: #0b1d3a !important;
+        fill: #0b1d3a !important;
     }
     </style>
     """,
@@ -347,7 +325,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="stToolbar"] > * {display: none !important;}
+        [data-testid="stToolbar"] {display: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>
