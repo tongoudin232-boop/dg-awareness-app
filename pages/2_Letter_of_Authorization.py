@@ -10,6 +10,7 @@ import base64
 import json
 import urllib.request
 import glob
+import textwrap
 
 try:
     from PyPDF2 import PdfReader, PdfWriter, Transformation
@@ -36,7 +37,8 @@ st.set_page_config(
 # GOOGLE API & INIT
 # ---------------------------------------------------------
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-SHEET_COLUMNS = ["nomor_induk", "nama", "nik_emp", "jabatan", "kategori", "role", "perusahaan", "no_hp", "distrik", "exp_dg_cert", "url_foto", "url_license", "tgl_submit", "status_verifikasi", "catatan_admin", "status_ujian", "nilai", "tgl_ujian", "loa_valid_until", "no_loa_in", "no_loa_sj"]
+# Penambahan kolom jawaban_ujian di akhir array
+SHEET_COLUMNS = ["nomor_induk", "nama", "nik_emp", "jabatan", "kategori", "role", "perusahaan", "no_hp", "distrik", "exp_dg_cert", "url_foto", "url_license", "tgl_submit", "status_verifikasi", "catatan_admin", "status_ujian", "nilai", "tgl_ujian", "loa_valid_until", "no_loa_in", "no_loa_sj", "jawaban_ujian"]
 TAB_NAME = "DataPesertaLoA"
 
 def get_credentials():
@@ -270,7 +272,7 @@ def load_data_peserta():
             sheet_names = [s['properties']['title'] for s in sheets]
             target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
             
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{target_sheet}!A1:U").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{target_sheet}!A1:V").execute()
             v = r.get("values", [])
             if v and len(v) > 1:
                 h = v[0]
@@ -292,7 +294,6 @@ def load_data_peserta():
         return df
         
     return pd.DataFrame(columns=SHEET_COLUMNS)
-
 
 # =========================================================
 # 🔴 PORTAL VERIFIKASI QR CODE KHUSUS LoA 
@@ -361,7 +362,6 @@ if "loa" in query_params:
             st.markdown(f"**Masa Berlaku LoA (Valid Until):** `{rec['loa_valid_until']}`")
             st.markdown(f"**No. LoA Terscan:** `{loa_query}`")
 
-        # Tampilkan Foto Peserta jika ada
         foto_url = str(rec.get("url_foto", "")).strip()
         nomor = str(rec.get("nomor_induk", ""))
         foto_local = ""
@@ -376,7 +376,6 @@ if "loa" in query_params:
         st.warning(f"Nomor LoA '{loa_query}' tidak terdaftar pada sistem database resmi Sriwijaya Air & NAM Air Cargo.")
         
     st.stop()
-# =========================================================
 
 
 def save_new_peserta(d):
@@ -411,7 +410,7 @@ def update_peserta(no_id, uf):
             if str(p.get("nomor_induk", "")).strip() == str(no_id).strip(): p.update(uf)
     if not service_sheets or not SPREADSHEET_ID: return True
     try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:V").execute()
         v = r.get("values", [])
         if not v: return False
         h = v[0]
@@ -420,6 +419,13 @@ def update_peserta(no_id, uf):
             if row and str(row[0]).strip() == str(no_id).strip(): ri = i + 1; break
         if ri != -1:
             for fd, val in uf.items():
+                if fd not in h:
+                    h.append(fd)
+                    try:
+                        c_idx = len(h) - 1
+                        cl_new = chr(ord('A') + c_idx)
+                        service_sheets.spreadsheets().values().update(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!{cl_new}1", valueInputOption="USER_ENTERED", body={"values": [[fd]]}).execute()
+                    except: pass
                 if fd in h:
                     cl = chr(ord('A') + h.index(fd))
                     service_sheets.spreadsheets().values().update(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!{cl}{ri}", valueInputOption="USER_ENTERED", body={"values": [[str(val)[:49000]]]}).execute()
@@ -432,7 +438,7 @@ def delete_peserta_trial(no_id):
         st.session_state.local_peserta_loa = [p for p in st.session_state.local_peserta_loa if str(p.get("nomor_induk", "")).strip() != str(no_id).strip()]
     if not service_sheets or not SPREADSHEET_ID: return True
     try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:U").execute()
+        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:V").execute()
         v = r.get("values", [])
         if not v: return False
         ri = -1
@@ -469,7 +475,6 @@ def generate_nomor_loa(df_all, carrier):
 # GENERATOR LIVE PDF TAMPING OVERLAY & QR CODE
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
-    """ Memperbesar template asli menjadi A4 Penuh dan menempatkan teks dengan koordinat presisi final """
     import os, glob, io, urllib.request
     try:
         existing_pdf = PdfReader(open(template_path, "rb"))
@@ -514,13 +519,11 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     except Exception:
         pass
 
-    # 4. FOTO PESERTA
     foto_url = str(p.get("url_foto", "")).strip()
     nomor = str(p.get("nomor_induk", ""))
     foto_local = ""
     matches = glob.glob(f"uploads/FOTO_{nomor}*")
-    if matches: 
-        foto_local = matches[0]
+    if matches: foto_local = matches[0]
     
     foto_x = a4_w * 0.05
     foto_y = a4_h * 0.28
@@ -528,8 +531,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     foto_h = a4_h * 0.36
     
     img_data = None
-    if foto_local and os.path.exists(foto_local):
-        img_data = foto_local
+    if foto_local and os.path.exists(foto_local): img_data = foto_local
     elif foto_url.startswith("http"):
         try:
             direct_url = foto_url
@@ -537,24 +539,16 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
                 fid = foto_url.split("/file/d/")[1].split("/")[0]
                 direct_url = f"https://drive.google.com/uc?export=download&id={fid}"
             req = urllib.request.Request(direct_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as response:
-                img_data = io.BytesIO(response.read())
-        except Exception:
-            pass
+            with urllib.request.urlopen(req, timeout=5) as response: img_data = io.BytesIO(response.read())
+        except Exception: pass
 
     if img_data:
-        try:
-            can.drawImage(ImageReader(img_data), foto_x, foto_y, width=foto_w, height=foto_h)
-        except Exception:
-            pass 
-    else:
-        pass 
+        try: can.drawImage(ImageReader(img_data), foto_x, foto_y, width=foto_w, height=foto_h)
+        except: pass 
 
-    # 1. NOMOR LoA
     can.setFont(font_utama, 14) 
     can.drawCentredString(a4_w * 0.62, a4_h * 0.84, f"{no_loa}")
     
-    # 2. DATA KARYAWAN
     data_x = a4_w * 0.44 
     can.setFont(font_utama, 18) 
     can.drawString(data_x, a4_h * 0.675, f"{p.get('nama', '-')}")
@@ -562,26 +556,18 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     can.drawString(data_x, a4_h * 0.585, f"{p.get('jabatan', '-')}")
     can.drawString(data_x, a4_h * 0.540, f"{p.get('perusahaan', '-')}")
     
-    # 3. ROLE KARYAWAN
     can.setFont(font_utama, 26)
     can.setFillColorRGB(0, 0, 0)
     can.drawCentredString(a4_w * 0.55, a4_h * 0.425, f"{role_str}")
     
-    # 6. VALID DATE VALUE
     can.setFillColorRGB(0, 0, 0)
     can.setFont(font_utama, 18)
     can.drawCentredString(a4_w * 0.14, a4_h * 0.13, f"{valid_date_fmt}")
     
-    # TANGGAL TERBIT
     can.setFont(font_tgl, 12) 
     can.drawCentredString(a4_w * 0.76, a4_h * 0.315, f"Tangerang, {tgl_terbit_fmt}")
     
-    # -------------------------------------------------------------------------
-    # MENGUBAH QR CODE MENJADI URL APLIKASI (SISTEM VERIFIKASI)
-    # -------------------------------------------------------------------------
-    # Sebelumnya menggunakan teks acak, sekarang menggunakan URL resmi ke aplikasi
     verify_url = f"https://sjnam-cargo.streamlit.app/Letter_of_Authorization?loa={no_loa}"
-    
     try:
         import qrcode
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=2) 
@@ -597,8 +583,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_x = (a4_w * 0.76) - (qr_size / 2) 
         qr_y = a4_h * 0.14 
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size)
-    except Exception:
-        pass
+    except Exception: pass
         
     can.save()
     packet.seek(0)
@@ -611,8 +596,75 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         final_pdf = io.BytesIO()
         output.write(final_pdf)
         return final_pdf.getvalue()
-    except Exception as e:
-        return None
+    except Exception: return None
+
+# ---------------------------------------------------------
+# GENERATOR HASIL UJIAN PDF
+# ---------------------------------------------------------
+def create_exam_result_pdf(p, answers_dict):
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=A4)
+    a4_w, a4_h = A4
+    
+    y = a4_h - 50
+    can.setFont("Helvetica-Bold", 16)
+    can.drawCentredString(a4_w/2, y, "LEMBAR HASIL UJIAN KOMPETENSI LOA")
+    y -= 30
+    
+    can.setFont("Helvetica", 11)
+    can.drawString(50, y, f"Nama       : {p.get('nama', '-')}")
+    can.drawString(320, y, f"Nilai   : {p.get('nilai', '0')}/100")
+    y -= 20
+    can.drawString(50, y, f"NIK        : {p.get('nik_emp', '-')}")
+    can.drawString(320, y, f"Status  : {p.get('status_ujian', '-')}")
+    y -= 20
+    can.drawString(50, y, f"Perusahaan : {p.get('perusahaan', '-')}")
+    can.drawString(320, y, f"Tanggal : {p.get('tgl_ujian', '-')}")
+    y -= 20
+    can.drawString(50, y, f"Distrik    : {p.get('distrik', '-')}")
+    
+    y -= 20
+    can.setLineWidth(1)
+    can.line(50, y, a4_w - 50, y)
+    y -= 20
+    
+    if not answers_dict:
+        can.drawString(50, y, "Data rincian jawaban tidak tersedia (peserta ujian versi lama).")
+        can.save()
+        packet.seek(0)
+        return packet.getvalue()
+        
+    for q in SOAL_UJIAN_RESMI:
+        if y < 80:
+            can.showPage()
+            y = a4_h - 50
+            
+        can.setFont("Helvetica-Bold", 10)
+        wrapped_q = textwrap.wrap(f"{q['no']}. {q['q']}", width=80)
+        for line in wrapped_q:
+            can.drawString(50, y, line)
+            y -= 15
+            
+        user_ans = str(answers_dict.get(str(q['no']), answers_dict.get(q['no'], "-")))
+        correct_ans = q['a']
+        
+        can.setFont("Helvetica", 10)
+        if user_ans == correct_ans:
+            can.setFillColorRGB(0, 0.5, 0)
+            can.drawString(60, y, f"Jawaban Peserta: {user_ans} (BENAR)")
+        else:
+            can.setFillColorRGB(0.8, 0, 0)
+            can.drawString(60, y, f"Jawaban Peserta: {user_ans} (SALAH)")
+            y -= 15
+            can.setFillColorRGB(0, 0, 0)
+            can.drawString(60, y, f"Kunci Jawaban  : {correct_ans}")
+            
+        can.setFillColorRGB(0, 0, 0)
+        y -= 25
+        
+    can.save()
+    packet.seek(0)
+    return packet.getvalue()
 
 
 SOAL_UJIAN_RESMI = [
@@ -705,7 +757,7 @@ if sub_menu == "1. Submit Data LoA (Publik)":
                     ext_cert = os.path.splitext(foto_cert.name)[1] or ".pdf"
                     url_foto = upload_file_handler(foto_merah, FOLDER_FOTO_ID, f"FOTO_{nomor_induk}_{nama}{ext_foto}")
                     url_license = upload_file_handler(foto_cert, FOLDER_LICENSE_ID, f"CERT_{nomor_induk}_{nama}{ext_cert}")
-                    record_baru = {"nomor_induk": nomor_induk, "nama": nama, "nik_emp": nik_emp, "jabatan": jabatan, "kategori": kategori, "role": role_dg, "perusahaan": perusahaan, "no_hp": no_hp, "distrik": distrik, "exp_dg_cert": str(exp_dg_cert), "url_foto": url_foto, "url_license": url_license, "tgl_submit": str(date.today()), "status_verifikasi": "Pending", "catatan_admin": "", "status_ujian": "Belum Ujian", "nilai": 0, "tgl_ujian": "", "loa_valid_until": "", "no_loa_in": "", "no_loa_sj": ""}
+                    record_baru = {"nomor_induk": nomor_induk, "nama": nama, "nik_emp": nik_emp, "jabatan": jabatan, "kategori": kategori, "role": role_dg, "perusahaan": perusahaan, "no_hp": no_hp, "distrik": distrik, "exp_dg_cert": str(exp_dg_cert), "url_foto": url_foto, "url_license": url_license, "tgl_submit": str(date.today()), "status_verifikasi": "Pending", "catatan_admin": "", "status_ujian": "Belum Ujian", "nilai": 0, "tgl_ujian": "", "loa_valid_until": "", "no_loa_in": "", "no_loa_sj": "", "jawaban_ujian": ""}
                     if save_new_peserta(record_baru):
                         st.success("✅ Berkas berhasil terkirim!")
                         st.info(f"🎫 Nomor Induk Resmi Anda: **{nomor_induk}**. Harap dicatat!")
@@ -866,11 +918,28 @@ elif sub_menu == "3. Ujian Penilaian Kompetensi LoA (Publik)":
                                     else:
                                         skor_benar = sum(4 for q in SOAL_UJIAN_RESMI if answers[q["no"]] == q["a"])
                                         tgl_skrg = date.today()
+                                        
+                                        # Simpan jawaban asli peserta ke database format JSON
+                                        ans_json = json.dumps({str(k): str(v) for k, v in answers.items()})
+                                        
                                         if skor_benar >= 80:
-                                            update_peserta(login_id, {"status_ujian": "Lulus", "nilai": skor_benar, "tgl_ujian": str(tgl_skrg), "loa_valid_until": str(tgl_skrg + relativedelta(months=24)), "no_loa_in": generate_nomor_loa(df_all, "IN"), "no_loa_sj": generate_nomor_loa(df_all, "SJ")})
+                                            update_peserta(login_id, {
+                                                "status_ujian": "Lulus", 
+                                                "nilai": skor_benar, 
+                                                "tgl_ujian": str(tgl_skrg), 
+                                                "loa_valid_until": str(tgl_skrg + relativedelta(months=24)), 
+                                                "no_loa_in": generate_nomor_loa(df_all, "IN"), 
+                                                "no_loa_sj": generate_nomor_loa(df_all, "SJ"),
+                                                "jawaban_ujian": ans_json
+                                            })
                                             st.success(f"🎉 LULUS! Nilai: {skor_benar}/100."); st.rerun()
                                         else:
-                                            update_peserta(login_id, {"status_ujian": "Tidak Lulus", "nilai": skor_benar, "tgl_ujian": str(tgl_skrg)})
+                                            update_peserta(login_id, {
+                                                "status_ujian": "Tidak Lulus", 
+                                                "nilai": skor_benar, 
+                                                "tgl_ujian": str(tgl_skrg),
+                                                "jawaban_ujian": ans_json
+                                            })
                                             st.error(f"Nilai Anda {skor_benar}/100 (Passing Grade: 80). Silakan ulangi ujian."); st.rerun()
 
 elif sub_menu == "4. Laporan Evaluasi Assessment":
@@ -936,6 +1005,54 @@ elif sub_menu == "4. Laporan Evaluasi Assessment":
                     )
                 else:
                     st.error("Gagal membuat arsip ZIP. Pastikan template PDF asli tersedia.")
+
+        # =================================================================================
+        # FITUR BARU: UNDUH LEMBAR HASIL UJIAN (PDF) PER DISTRIK
+        # =================================================================================
+        st.markdown("---")
+        st.subheader("📑 Unduh Hasil Ujian & Lembar Jawaban (ZIP)")
+        st.caption("Unduh PDF rincian jawaban soal (benar/salah) untuk semua personil yang sudah ujian di distrik tertentu.")
+        
+        selected_distrik_ujian = st.selectbox("Pilih Distrik untuk Unduh Lembar Ujian:", st.session_state.db_distrik, key="zip_ujian_sel")
+        if st.button("🗂️ Generate & Download ZIP Lembar Ujian"):
+            import zipfile
+            # Filter hanya peserta yang sudah memiliki nilai/status ujian selain "Belum Ujian"
+            df_ujian_dist = df_all[(df_all["distrik"].astype(str).str.strip() == selected_distrik_ujian.strip()) & (df_all["status_ujian"].astype(str).str.lower().isin(["lulus", "tidak lulus"]))]
+            
+            if df_ujian_dist.empty:
+                st.warning(f"Tidak ada peserta yang sudah mengikuti ujian di distrik {selected_distrik_ujian}.")
+            else:
+                zip_buffer = io.BytesIO()
+                file_count = 0
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for _, p in df_ujian_dist.iterrows():
+                        p_dict = p.to_dict()
+                        ans_str = p_dict.get("jawaban_ujian", "{}")
+                        try:
+                            ans_dict = json.loads(ans_str) if str(ans_str).strip() else {}
+                        except:
+                            ans_dict = {}
+                            
+                        pdf_ujian = create_exam_result_pdf(p_dict, ans_dict)
+                        if pdf_ujian:
+                            safe_nama = "".join(c for c in str(p_dict.get('nama', 'Peserta')) if c.isalnum() or c in (' ', '_', '-')).strip()
+                            nik = str(p_dict.get('nik_emp', ''))
+                            zip_file.writestr(f"Lembar_Ujian_{safe_nama}_{nik}.pdf", pdf_ujian)
+                            file_count += 1
+                            
+                if file_count > 0:
+                    zip_buffer.seek(0)
+                    safe_dist_fn = selected_distrik_ujian.replace(" - ", "_").replace(" ", "_")
+                    st.success(f"✅ Berhasil mengemas {file_count} dokumen Hasil Ujian dari distrik {selected_distrik_ujian}!")
+                    st.download_button(
+                        label=f"📥 Download ZIP Lembar Ujian ({selected_distrik_ujian})",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"Hasil_Ujian_Distrik_{safe_dist_fn}.zip",
+                        mime="application/zip"
+                    )
+                else:
+                    st.error("Gagal membuat arsip ZIP. File PDF tidak dapat di-generate.")
+        # =================================================================================
 
         st.markdown("---")
         st.subheader("🗑️ Hapus Data Trial")
