@@ -34,15 +34,47 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS SUPER AMAN: Tembak spesifik tombol Fork & Github saja!
+# CSS ULTIMATE: Bantai Fork/Github, Lindungi Tombol Sidebar, Sembunyikan "app"
 # ==============================================================
 st.markdown(
     """
     <style>
-    .stAppDeployButton, button[title="Fork this app"], button[title="View source code"], #MainMenu {
+    /* 1. Bantai semua elemen di kerangka kanan (Fork, GitHub, Titik Tiga) */
+    [data-testid="stToolbar"],
+    .stAppDeployButton,
+    [data-testid="stToolbarActions"],
+    header > div:nth-child(2),
+    header > div:last-child {
         display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
-    .viewerBadge_container__1QSob, [class*="viewerBadge"] {
+    
+    /* 2. Lindungi dan beri warna Biru Gelap pada tombol Garis Tiga di kerangka kiri */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: #0b1d3a !important;
+        border-radius: 8px !important;
+        padding: 5px !important;
+        z-index: 999999 !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* 3. Bantai logo/watermark Hosted with Streamlit Cloud di bawah */
+    .viewerBadge_container__1QSob,
+    [class*="viewerBadge"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* 4. SEMBUNYIKAN MENU "APP" DI SIDEBAR */
+    [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }
     </style>
@@ -319,7 +351,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="stToolbar"] > * {display: none !important;}
+        [data-testid="stToolbar"] {display: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>
