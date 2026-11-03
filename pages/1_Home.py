@@ -7,6 +7,23 @@ st.set_page_config(
     layout="wide"
 )
 
+# MENYEMBUNYIKAN TOMBOL FORK & GITHUB DI POJOK KANAN ATAS
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Custom Styling mimicking the dark blue banner
 st.markdown("""
 <style>
