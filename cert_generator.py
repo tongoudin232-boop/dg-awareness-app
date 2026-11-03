@@ -21,7 +21,7 @@ def format_custom_date(date_str):
 
 def create_qr_file(airline, cert_no, name, date_str):
     # Link URL verifikasi online resmi yang akan dibuka saat scan QR
-    verify_url = f"https://ujian-dg-awareness.streamlit.app/?cert={cert_no}"
+    verify_url = f"https://sjnam-cargo.streamlit.app/Dangerous_Goods_Awareness?cert={cert_no}"
     
     qr = qrcode.QRCode(
         version=1,
