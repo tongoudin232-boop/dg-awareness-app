@@ -8,34 +8,31 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL & AMAN: Bikin transparan, jangan dihancurkan (display: none dihapus!)
+# CSS FINAL: 100% AMAN. HANYA TEMBUS PANDANG, TIDAK MERUNTUHKAN HEADER
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* 1. Bikin kerangka kanan (Fork, Github, titik tiga) jadi TEMBUS PANDANG agar header tidak runtuh */
-    [data-testid="stToolbar"],
+    /* Bikin Fork, Github, dan Toolbar Kanan jadi kaca (tembus pandang) agar tata letak tetap utuh! */
     .stAppDeployButton,
-    [data-testid="stToolbarActions"],
-    header > div:nth-child(2) {
+    [data-testid="stToolbar"] {
         opacity: 0 !important;
         pointer-events: none !important;
     }
     
-    /* 2. Warnai tombol garis tiga (sidebar) jadi Biru Gelap agar tidak menyatu dengan background putih */
+    /* Matikan logo "Hosted with Streamlit" di bawah */
+    .viewerBadge_container__1QSob,
+    [class*="viewerBadge"] {
+        display: none !important;
+    }
+    
+    /* Beri warna Biru Gelap pada ikon Garis Tiga agar terlihat jelas di HP (tidak putih menyaru) */
     [data-testid="collapsedControl"] svg {
         color: #0b1d3a !important;
         fill: #0b1d3a !important;
     }
-    
-    /* 3. Bantai logo/watermark Hosted with Streamlit Cloud di bawah */
-    .viewerBadge_container__1QSob,
-    [class*="viewerBadge"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
 
-    /* 4. SEMBUNYIKAN MENU "APP" DI SIDEBAR */
+    /* Sembunyikan tulisan "app" di menu sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }

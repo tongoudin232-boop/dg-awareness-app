@@ -34,34 +34,24 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL & AMAN: Bikin transparan, jangan dihancurkan
+# CSS FINAL: 100% AMAN. HANYA TEMBUS PANDANG, TIDAK MERUNTUHKAN HEADER
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* 1. Bikin kerangka kanan (Fork, Github, titik tiga) jadi TEMBUS PANDANG agar header tidak runtuh */
-    [data-testid="stToolbar"],
     .stAppDeployButton,
-    [data-testid="stToolbarActions"],
-    header > div:nth-child(2) {
+    [data-testid="stToolbar"] {
         opacity: 0 !important;
         pointer-events: none !important;
     }
-    
-    /* 2. Warnai tombol garis tiga (sidebar) jadi Biru Gelap agar tidak menyatu dengan background putih */
+    .viewerBadge_container__1QSob,
+    [class*="viewerBadge"] {
+        display: none !important;
+    }
     [data-testid="collapsedControl"] svg {
         color: #0b1d3a !important;
         fill: #0b1d3a !important;
     }
-    
-    /* 3. Bantai logo/watermark Hosted with Streamlit Cloud di bawah */
-    .viewerBadge_container__1QSob,
-    [class*="viewerBadge"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-
-    /* 4. SEMBUNYIKAN MENU "APP" DI SIDEBAR */
     [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }
@@ -339,7 +329,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="stToolbar"] > * {display: none !important;}
+        [data-testid="stToolbar"] {opacity: 0 !important; pointer-events: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>
