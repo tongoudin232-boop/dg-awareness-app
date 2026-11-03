@@ -7,28 +7,20 @@ st.set_page_config(
     layout="wide"
 )
 
-# PERBAIKAN CSS: Sembunyikan Fork/Github, tapi GARIS TIGA (Menu) tetap aman dan melayang di HP
+# PERBAIKAN CSS: Sembunyikan Fork/Github, tapi GARIS TIGA (Menu) tetap aman dan bisa diklik di HP
 st.markdown(
     """
     <style>
-    /* Sembunyikan tombol pojok kanan atas */
+    /* Sembunyikan tombol di kanan atas dengan cara di-hidden agar layout tidak hancur */
     [data-testid="stToolbar"] {
-        display: none !important;
+        visibility: hidden !important;
     }
-    /* Tombol menu garis tiga di kiri atas dibikin melayang dan jelas */
+    /* Pastikan tombol sidebar kiri atas selalu muncul */
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
+        opacity: 1 !important;
         z-index: 999999 !important;
-        background-color: #0b1d3a !important; /* Biru gelap */
-        border-radius: 8px !important;
-        padding: 5px !important;
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.1) !important;
-        margin-top: 5px !important;
-        margin-left: 5px !important;
-    }
-    [data-testid="collapsedControl"] svg {
-        fill: #ffffff !important; /* Ikon warna putih */
     }
     </style>
     """,
