@@ -18,8 +18,8 @@ def get_gspread_client():
             creds_dict = dict(st.secrets)
             
         if "private_key" in creds_dict:
-            creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\n", "
-")
+            # PERBAIKAN: Format baris yang sebelumnya terbelah dan bikin SyntaxError
+            creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\\n", "\n")
             
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         client = gspread.authorize(credentials)
@@ -32,21 +32,17 @@ def get_spreadsheet():
     client = get_gspread_client()
     if not client: return None
     
-    # KITA PAKSA MENGGUNAKAN SPREADSHEET MILIK SERVICE ACCOUNT SENDIRI
-    # UNTUK MENGHINDARI ERROR 404 PERMISSIONS
+    # Memaksa pembuatan/penggunaan database internal
     try:
         sh = client.open("DG_Awareness_Database")
-        
-        # Share spreadsheet ini ke email Gmail user agar mereka bisa buka
         try:
             sh.share('tongoudin232@gmail.com', perm_type='user', role='writer')
         except:
-            pass # abaikan jika sudah di-share
+            pass
             
         st.success(f"✅ Terhubung ke Database Cloud Internal: [Buka Google Sheets]({sh.url})")
-        st.info("💡 Karena Google memblokir akses ke file lama Anda, sistem otomatis membuatkan file database baru. Silakan klik link di atas, buka file-nya, lalu **COPY-PASTE** isi tabel lama Anda ke file yang baru ini.")
+        st.info("💡 Klik link di atas, lalu **COPY-PASTE** isi tabel lama Anda ke file yang baru ini.")
         
-        # Buat tab jika belum ada
         try:
             sh.worksheet("districts")
         except:
@@ -65,7 +61,6 @@ def get_spreadsheet():
             
         return sh
     except gspread.exceptions.SpreadsheetNotFound:
-        # Jika belum ada sama sekali, buat baru
         sh = client.create("DG_Awareness_Database")
         sh.share('tongoudin232@gmail.com', perm_type='user', role='writer')
         
@@ -108,12 +103,10 @@ def get_districts():
         st.error(f"Gagal membaca tab districts: {e}")
         return pd.DataFrame()
 
-
 def add_district(code, name, category):
     df = get_districts()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
     new_row = [next_id, code.upper().strip(), name.strip(), category.strip(), "", ""]
-    
     sh = get_spreadsheet()
     if sh:
         try:
@@ -122,7 +115,6 @@ def add_district(code, name, category):
             st.cache_data.clear()
             st.cache_resource.clear()
         except: pass
-
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
     sh = get_spreadsheet()
@@ -139,7 +131,6 @@ def update_district_row(dist_id, code, name, category, last_date, due_date):
                     break
         except: pass
 
-
 def delete_district_row(dist_id):
     sh = get_spreadsheet()
     if sh:
@@ -153,7 +144,6 @@ def delete_district_row(dist_id):
                     st.cache_resource.clear()
                     break
         except: pass
-
 
 def get_training_records():
     sh = get_spreadsheet()
@@ -175,7 +165,6 @@ def get_training_records():
         st.error(f"Gagal membaca tab training_records: {e}")
         return pd.DataFrame()
 
-
 def get_next_cert_number(airline):
     now = datetime.now()
     prefix_yymm = now.strftime("%y%m")
@@ -196,7 +185,6 @@ def get_next_cert_number(airline):
     next_seq = max_seq + 1
     return f"{prefix_yymm}{next_seq:04d}"
 
-
 def save_training_record(record_data):
     df = get_training_records()
 
@@ -209,7 +197,6 @@ def save_training_record(record_data):
     next_id = 1 if df.empty else int(df['id'].max()) + 1
     record_data['id'] = next_id
 
-    # Pastikan urutan list sesuai header
     headers = [
         "id", "training_date", "full_name", "nik", "phone",
         "job_role", "company", "district", "district_full", "score", "status",
@@ -244,7 +231,6 @@ def save_training_record(record_data):
     st.cache_resource.clear()
     return True
 
-
 def delete_training_record(record_id):
     sh = get_spreadsheet()
     if sh:
@@ -259,11 +245,9 @@ def delete_training_record(record_id):
                     break
         except: pass
 
-
 def reset_cert_sequence():
     st.cache_data.clear()
     st.cache_resource.clear()
-
 
 def clear_all_training_records():
     sh = get_spreadsheet()
