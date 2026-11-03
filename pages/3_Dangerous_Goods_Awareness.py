@@ -32,18 +32,20 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL: 100% AMAN. HANYA TEMBUS PANDANG, TIDAK MERUNTUHKAN HEADER
+# CSS FINAL: KEMBALI KE BASIC. JANGAN SENTUH HEADER SAMA SEKALI.
 # ==============================================================
 st.markdown(
     """
     <style>
-    [data-testid="stToolbar"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    .stAppDeployButton {
+        display: none !important;
     }
+    .viewerBadge_container__1QSob,
     [class*="viewerBadge"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+        display: none !important;
+    }
+    [data-testid="stSidebarNav"] ul li:first-child {
+        display: none !important;
     }
     </style>
     """,

@@ -8,45 +8,23 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS DEWA: TOMBOL MENU MELAYANG BEBAS (ANTI HILANG)
+# CSS FINAL: KEMBALI KE BASIC. JANGAN SENTUH HEADER SAMA SEKALI.
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* Bantai semua pengganggu di kanan dan bawah (Fork, GitHub, Watermark) */
-    [data-testid="stToolbar"], 
-    [class*="viewerBadge"], 
+    /* 1. HANYA tembak wadah Fork & Github bawaan Streamlit Cloud */
     .stAppDeployButton {
         display: none !important;
     }
     
-    /* Paksa header agar tidak kempis dan tetap memberi jarak di atas */
-    [data-testid="stHeader"] {
-        display: block !important;
-        background: transparent !important;
-        height: 60px !important;
-        overflow: visible !important;
+    /* 2. Matikan logo Hosted with Streamlit di bawah */
+    .viewerBadge_container__1QSob,
+    [class*="viewerBadge"] {
+        display: none !important;
     }
-    
-    /* CABUT tombol garis tiga dari kerangka, jadikan tombol MELAYANG BEBAS (Fixed) */
-    [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 999999 !important;
-        background-color: #0b1d3a !important;
-        border-radius: 8px !important;
-        padding: 6px !important;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5) !important;
-    }
-    [data-testid="collapsedControl"] svg {
-        fill: #ffffff !important;
-        color: #ffffff !important;
-    }
-    
-    /* Sembunyikan "app" dari sidebar */
+
+    /* 3. Sembunyikan menu "app" dari sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }
