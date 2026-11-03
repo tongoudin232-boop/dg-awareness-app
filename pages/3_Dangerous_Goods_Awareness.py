@@ -31,26 +31,44 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# PERBAIKAN CSS: Sembunyikan Fork/Github, tapi GARIS TIGA (Menu) tetap aman dan bisa diklik di HP
+# ==============================================================
+# CSS ULTIMATE: Hapus Fork/Github, Warnai Tombol Garis Tiga!
+# ==============================================================
 st.markdown(
     """
     <style>
-    /* Sembunyikan tombol di kanan atas dengan cara di-hidden agar layout tidak hancur */
-    [data-testid="stToolbar"] {
-        visibility: hidden !important;
+    .viewerBadge_container__1QSob,
+    .viewerBadge_link__1S137,
+    div[class*="viewerBadge"],
+    div[class*="stAppDeployButton"] {
+        display: none !important;
     }
-    /* Pastikan tombol sidebar kiri atas selalu muncul */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         z-index: 999999 !important;
+        background-color: #0b1d3a !important; /* Latar Biru Gelap */
+        border-radius: 8px !important;
+        padding: 6px !important;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.2) !important;
+        margin-top: 5px !important;
+        margin-left: 5px !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
-
 
 # Inisialisasi Session State Login Instruktur
 if "is_instructor" not in st.session_state:
@@ -732,7 +750,7 @@ elif menu == "Dashboard Instruktur & Records":
                 else:
                     df_dist_only = p_copy[p_copy['district'] == target_dist].copy()
                     
-                    # Gabungkan seluruh kolom identitas teks yang ada pada data
+                    # Gab Gabungkan seluruh kolom identitas teks yang ada pada data
                     search_corpus = df_dist_only['company'].fillna('').astype(str)
                     if 'district_full' in df_dist_only.columns:
                         search_corpus = search_corpus + " " + df_dist_only['district_full'].fillna('').astype(str)

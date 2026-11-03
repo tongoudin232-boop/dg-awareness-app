@@ -7,20 +7,40 @@ st.set_page_config(
     layout="wide"
 )
 
-# PERBAIKAN CSS: Sembunyikan Fork/Github, tapi GARIS TIGA (Menu) tetap aman dan bisa diklik di HP
+# ==============================================================
+# CSS ULTIMATE: Hapus Fork/Github, Warnai Tombol Garis Tiga!
+# ==============================================================
 st.markdown(
     """
     <style>
-    /* Sembunyikan tombol di kanan atas dengan cara di-hidden agar layout tidak hancur */
-    [data-testid="stToolbar"] {
-        visibility: hidden !important;
+    /* 1. Hilangkan Fork, Github, dan Deploy Badge bawaan Cloud */
+    .viewerBadge_container__1QSob,
+    .viewerBadge_link__1S137,
+    div[class*="viewerBadge"],
+    div[class*="stAppDeployButton"] {
+        display: none !important;
     }
-    /* Pastikan tombol sidebar kiri atas selalu muncul */
+    /* 2. Sembunyikan isi Toolbar Kanan (titik tiga) */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    /* 3. MUNCULKAN TOMBOL GARIS TIGA & BERI WARNA BIRU GELAP AGAR TERLIHAT! */
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         z-index: 999999 !important;
+        background-color: #0b1d3a !important; /* Latar Biru Gelap */
+        border-radius: 8px !important;
+        padding: 6px !important;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.2) !important;
+        margin-top: 5px !important;
+        margin-left: 5px !important;
+    }
+    /* Ubah warna ikon garis tiga menjadi putih agar kontras */
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
     }
     </style>
     """,
