@@ -8,7 +8,7 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS ULTIMATE: Hapus Fork/Github, Warnai Tombol Garis Tiga!
+# CSS FINAL: Lenyapkan Fork/Github tanpa meruntuhkan Header!
 # ==============================================================
 st.markdown(
     """
@@ -20,24 +20,29 @@ st.markdown(
     div[class*="stAppDeployButton"] {
         display: none !important;
     }
-    /* 2. Sembunyikan isi Toolbar Kanan (titik tiga) */
-    [data-testid="stToolbar"] {
+    
+    /* 2. Sembunyikan HANYA anak-anak (isi) dari toolbar kanan agar header tidak kempis */
+    [data-testid="stToolbar"] > * {
         display: none !important;
     }
-    /* 3. MUNCULKAN TOMBOL GARIS TIGA & BERI WARNA BIRU GELAP AGAR TERLIHAT! */
+    
+    /* 3. Paksa Header dan Menu Garis Tiga agar selalu muncul, plus warna biru dongker */
+    [data-testid="stHeader"] {
+        display: block !important;
+        visibility: visible !important;
+    }
     [data-testid="collapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
         z-index: 999999 !important;
-        background-color: #0b1d3a !important; /* Latar Biru Gelap */
+        background-color: #0b1d3a !important; 
         border-radius: 8px !important;
         padding: 6px !important;
         box-shadow: 0px 4px 6px rgba(0,0,0,0.2) !important;
         margin-top: 5px !important;
         margin-left: 5px !important;
     }
-    /* Ubah warna ikon garis tiga menjadi putih agar kontras */
     [data-testid="collapsedControl"] svg {
         fill: #ffffff !important;
         color: #ffffff !important;
