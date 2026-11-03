@@ -18,7 +18,6 @@ def get_gspread_client():
             creds_dict = dict(st.secrets)
             
         if "private_key" in creds_dict:
-            # PERBAIKAN: Format baris yang sebelumnya terbelah dan bikin SyntaxError
             creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\\n", "\n")
             
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
@@ -32,7 +31,6 @@ def get_spreadsheet():
     client = get_gspread_client()
     if not client: return None
     
-    # Memaksa pembuatan/penggunaan database internal
     try:
         sh = client.open("DG_Awareness_Database")
         try:
@@ -40,9 +38,6 @@ def get_spreadsheet():
         except:
             pass
             
-        st.success(f"✅ Terhubung ke Database Cloud Internal: [Buka Google Sheets]({sh.url})")
-        st.info("💡 Klik link di atas, lalu **COPY-PASTE** isi tabel lama Anda ke file yang baru ini.")
-        
         try:
             sh.worksheet("districts")
         except:
@@ -78,7 +73,6 @@ def get_spreadsheet():
             sh.del_worksheet(sh.worksheet("Sheet1"))
         except: pass
         
-        st.success(f"✅ Database Cloud Internal Berhasil Dibuat: [Buka Google Sheets]({sh.url})")
         return sh
     except Exception as e:
         st.error(f"❌ Terjadi kesalahan saat menyiapkan database internal: {e}")
@@ -100,7 +94,6 @@ def get_districts():
             return df.sort_values(by=['code', 'name']).reset_index(drop=True)
         return df
     except Exception as e:
-        st.error(f"Gagal membaca tab districts: {e}")
         return pd.DataFrame()
 
 def add_district(code, name, category):
@@ -162,7 +155,6 @@ def get_training_records():
             return df.sort_values(by='id', ascending=False).reset_index(drop=True)
         return df
     except Exception as e:
-        st.error(f"Gagal membaca tab training_records: {e}")
         return pd.DataFrame()
 
 def get_next_cert_number(airline):
