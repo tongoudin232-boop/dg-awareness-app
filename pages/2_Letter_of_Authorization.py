@@ -34,24 +34,45 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL: 100% AMAN. HANYA TEMBUS PANDANG, TIDAK MERUNTUHKAN HEADER
+# CSS DEWA: TOMBOL MENU MELAYANG BEBAS (ANTI HILANG)
 # ==============================================================
 st.markdown(
     """
     <style>
-    .stAppDeployButton,
-    [data-testid="stToolbar"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-    .viewerBadge_container__1QSob,
-    [class*="viewerBadge"] {
+    /* Bantai semua pengganggu di kanan dan bawah */
+    [data-testid="stToolbar"], 
+    [class*="viewerBadge"], 
+    .stAppDeployButton {
         display: none !important;
     }
-    [data-testid="collapsedControl"] svg {
-        color: #0b1d3a !important;
-        fill: #0b1d3a !important;
+    
+    /* Paksa header agar tidak kempis dan tetap memberi jarak di atas */
+    [data-testid="stHeader"] {
+        display: block !important;
+        background: transparent !important;
+        height: 60px !important;
+        overflow: visible !important;
     }
+    
+    /* CABUT tombol garis tiga dari kerangka, jadikan tombol MELAYANG BEBAS (Fixed) */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: #0b1d3a !important;
+        border-radius: 8px !important;
+        padding: 6px !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5) !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Sembunyikan "app" dari sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }
@@ -329,7 +350,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="stToolbar"] {opacity: 0 !important; pointer-events: none !important;}
+        [data-testid="stToolbar"] {display: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>
@@ -560,7 +581,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     elif foto_url.startswith("http"):
         try:
             direct_url = foto_url
-            if "drive.google.com/file/d/" in foto_url:
+            if "drive.google.com/file/d/" in finance_url:
                 fid = foto_url.split("/file/d/")[1].split("/")[0]
                 direct_url = f"https://drive.google.com/uc?export=download&id={fid}"
             req = urllib.request.Request(direct_url, headers={'User-Agent': 'Mozilla/5.0'})

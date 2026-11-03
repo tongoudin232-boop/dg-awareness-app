@@ -32,7 +32,7 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL & AMAN: Bikin transparan, jangan dihancurkan
+# CSS FINAL: 100% AMAN. HANYA TEMBUS PANDANG, TIDAK MERUNTUHKAN HEADER
 # ==============================================================
 st.markdown(
     """

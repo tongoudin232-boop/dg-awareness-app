@@ -8,31 +8,45 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL: 100% AMAN. HANYA TEMBUS PANDANG, TIDAK MERUNTUHKAN HEADER
+# CSS DEWA: TOMBOL MENU MELAYANG BEBAS (ANTI HILANG)
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* Bikin Fork, Github, dan Toolbar Kanan jadi kaca (tembus pandang) agar tata letak tetap utuh! */
-    .stAppDeployButton,
-    [data-testid="stToolbar"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-    
-    /* Matikan logo "Hosted with Streamlit" di bawah */
-    .viewerBadge_container__1QSob,
-    [class*="viewerBadge"] {
+    /* Bantai semua pengganggu di kanan dan bawah (Fork, GitHub, Watermark) */
+    [data-testid="stToolbar"], 
+    [class*="viewerBadge"], 
+    .stAppDeployButton {
         display: none !important;
     }
     
-    /* Beri warna Biru Gelap pada ikon Garis Tiga agar terlihat jelas di HP (tidak putih menyaru) */
-    [data-testid="collapsedControl"] svg {
-        color: #0b1d3a !important;
-        fill: #0b1d3a !important;
+    /* Paksa header agar tidak kempis dan tetap memberi jarak di atas */
+    [data-testid="stHeader"] {
+        display: block !important;
+        background: transparent !important;
+        height: 60px !important;
+        overflow: visible !important;
     }
-
-    /* Sembunyikan tulisan "app" di menu sidebar */
+    
+    /* CABUT tombol garis tiga dari kerangka, jadikan tombol MELAYANG BEBAS (Fixed) */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: #0b1d3a !important;
+        border-radius: 8px !important;
+        padding: 6px !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5) !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* Sembunyikan "app" dari sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }
