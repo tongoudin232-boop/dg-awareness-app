@@ -34,18 +34,16 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS SILUMAN: Toolbar dibuat transparan agar Sidebar selamat!
+# CSS SUPER AMAN: Tembak spesifik tombol Fork & Github saja!
 # ==============================================================
 st.markdown(
     """
     <style>
-    [data-testid="stToolbar"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    .stAppDeployButton, button[title="Fork this app"], button[title="View source code"], #MainMenu {
+        display: none !important;
     }
-    [class*="viewerBadge"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    .viewerBadge_container__1QSob, [class*="viewerBadge"] {
+        display: none !important;
     }
     </style>
     """,
@@ -321,7 +319,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="stToolbar"] {display: none !important;}
+        [data-testid="stToolbar"] > * {display: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>

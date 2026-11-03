@@ -8,21 +8,19 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS SILUMAN: Toolbar dibuat transparan agar Sidebar selamat!
+# CSS SUPER AMAN: Tembak spesifik tombol Fork & Github saja!
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* Bikin tombol Fork/Github 100% transparan dan kebal klik */
-    [data-testid="stToolbar"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    /* Hapus tombol Fork, Github, Deploy, dan titik tiga secara spesifik */
+    .stAppDeployButton, button[title="Fork this app"], button[title="View source code"], #MainMenu {
+        display: none !important;
     }
     
-    /* Matikan juga tulisan "Hosted with Streamlit" */
-    [class*="viewerBadge"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    /* Hapus tulisan Hosted with Streamlit di bawah/atas */
+    .viewerBadge_container__1QSob, [class*="viewerBadge"] {
+        display: none !important;
     }
     </style>
     """,
