@@ -32,7 +32,7 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS SILUMAN: Toolbar dibuat transparan agar Sidebar selamat!
+# CSS FINAL & AMAN: Bikin transparan, jangan dihancurkan
 # ==============================================================
 st.markdown(
     """

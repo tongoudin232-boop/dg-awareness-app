@@ -34,36 +34,24 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS ULTIMATE: Bantai Fork/Github, Lindungi Tombol Sidebar, Sembunyikan "app"
+# CSS FINAL & AMAN: Bikin transparan, jangan dihancurkan
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* 1. Bantai semua elemen di kerangka kanan (Fork, GitHub, Titik Tiga) */
+    /* 1. Bikin kerangka kanan (Fork, Github, titik tiga) jadi TEMBUS PANDANG agar header tidak runtuh */
     [data-testid="stToolbar"],
     .stAppDeployButton,
     [data-testid="stToolbarActions"],
-    header > div:nth-child(2),
-    header > div:last-child {
-        display: none !important;
-        visibility: hidden !important;
+    header > div:nth-child(2) {
         opacity: 0 !important;
         pointer-events: none !important;
     }
     
-    /* 2. Lindungi dan beri warna Biru Gelap pada tombol Garis Tiga di kerangka kiri */
-    [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background-color: #0b1d3a !important;
-        border-radius: 8px !important;
-        padding: 5px !important;
-        z-index: 999999 !important;
-    }
+    /* 2. Warnai tombol garis tiga (sidebar) jadi Biru Gelap agar tidak menyatu dengan background putih */
     [data-testid="collapsedControl"] svg {
-        fill: #ffffff !important;
-        color: #ffffff !important;
+        color: #0b1d3a !important;
+        fill: #0b1d3a !important;
     }
     
     /* 3. Bantai logo/watermark Hosted with Streamlit Cloud di bawah */
@@ -351,7 +339,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="stToolbar"] {display: none !important;}
+        [data-testid="stToolbar"] > * {display: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>
