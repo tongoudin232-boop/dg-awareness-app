@@ -1,152 +1,134 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive'
+]
 
 @st.cache_resource
-def get_loa_credentials():
+def get_gspread_client():
     try:
         if "gcp_service_account" in st.secrets:
-            creds_info = dict(st.secrets["gcp_service_account"])
+            creds_dict = dict(st.secrets["gcp_service_account"])
         else:
-            creds_info = dict(st.secrets)
+            creds_dict = dict(st.secrets)
             
-        if not creds_info or "private_key" not in creds_info:
-            return None
-
-        if "private_key" in creds_info:
-            pk = str(creds_info["private_key"])
-            pk = pk.replace("\\n", "\n")
-            creds_info["private_key"] = pk.strip()
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\\n", "\n")
             
-        return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        client = gspread.authorize(credentials)
+        return client
     except Exception as e:
-        st.error(f"Credentials Error di database.py: {e}")
+        st.error(f"Gagal otentikasi Google Sheets: {e}")
         return None
 
-@st.cache_resource
-def get_loa_services():
-    creds = get_loa_credentials()
-    if not creds: return None, ""
+def get_spreadsheet():
+    client = get_gspread_client()
+    if not client: return None
     try:
-        s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
         sid = ""
-        try:
-            if "google_drive" in st.secrets:
-                sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip()
-        except:
-            pass
+        if "google_drive" in st.secrets:
+            sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip()
             
-        return s_sht, sid
+        if sid:
+            return client.open_by_key(sid)
+        else:
+            return client.open("DG_Awareness_Database")
     except Exception as e:
-        st.error(f"Service Error di database.py: {e}")
-        return None, ""
+        st.error(f"❌ Gagal membuka Spreadsheet: {e}. (Cek kembali ID atau Akses Share!)")
+        return None
 
-def get_connection():
-    return None
-
-def init_db():
-    pass
+def get_connection(): return None
+def init_db(): pass
 
 def get_districts():
-    s_sht, sid = get_loa_services()
-    if not s_sht or not sid: return pd.DataFrame()
+    sh = get_spreadsheet()
+    if not sh: return pd.DataFrame()
     try:
-        r = s_sht.spreadsheets().values().get(spreadsheetId=sid, range="districts!A1:Z").execute()
-        v = r.get("values", [])
-        if not v or len(v) < 2: return pd.DataFrame()
-        headers = v[0]
-        rows = [row + [""] * (len(headers) - len(row)) for row in v[1:]]
-        df = pd.DataFrame(rows, columns=headers)
-        
-        df = df.dropna(how='all')
-        if 'id' in df.columns:
+        ws = sh.worksheet("districts")
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
+        if not df.empty and 'id' in df.columns:
             df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
             df = df[df['id'] > 0]
             return df.sort_values(by=['code', 'name']).reset_index(drop=True)
         return df
     except Exception as e:
-        st.error(f"❌ database.py gagal membaca tab 'districts': {e}")
+        st.error(f"Gagal membaca tab districts: {e}")
         return pd.DataFrame()
+
 
 def add_district(code, name, category):
     df = get_districts()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
-    new_row = pd.DataFrame([{
-        "id": next_id,
-        "code": code.upper().strip(),
-        "name": name.strip(),
-        "category": category.strip(),
-        "last_training_date": "",
-        "next_due_date": ""
-    }])
-    updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
+    new_row = [next_id, code.upper().strip(), name.strip(), category.strip(), "", ""]
     
-    s_sht, sid = get_loa_services()
-    if s_sht and sid:
-        body = {"values": [updated_df.columns.values.tolist()] + updated_df.values.tolist()}
-        s_sht.spreadsheets().values().update(spreadsheetId=sid, range="districts!A1", valueInputOption="USER_ENTERED", body=body).execute()
-        st.cache_data.clear()
+    sh = get_spreadsheet()
+    if sh:
+        try:
+            ws = sh.worksheet("districts")
+            ws.append_row(new_row)
+            st.cache_data.clear()
+            st.cache_resource.clear()
+        except: pass
+
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
-    df = get_districts()
-    if not df.empty and 'id' in df.columns:
-        idx = df[df['id'] == int(dist_id)].index
-        if not idx.empty:
-            df.loc[idx, 'code'] = code.upper().strip()
-            df.loc[idx, 'name'] = name.strip()
-            df.loc[idx, 'category'] = category.strip()
-            df.loc[idx, 'last_training_date'] = str(last_date).strip()
-            df.loc[idx, 'next_due_date'] = str(due_date).strip()
-            
-            s_sht, sid = get_loa_services()
-            if s_sht and sid:
-                body = {"values": [df.columns.values.tolist()] + df.fillna('').values.tolist()}
-                s_sht.spreadsheets().values().update(spreadsheetId=sid, range="districts!A1", valueInputOption="USER_ENTERED", body=body).execute()
-                st.cache_data.clear()
+    sh = get_spreadsheet()
+    if sh:
+        try:
+            ws = sh.worksheet("districts")
+            records = ws.get_all_records()
+            for i, row in enumerate(records):
+                if str(row.get('id', '')) == str(dist_id):
+                    row_idx = i + 2
+                    ws.update(f"B{row_idx}:F{row_idx}", [[code.upper().strip(), name.strip(), category.strip(), str(last_date).strip(), str(due_date).strip()]])
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    break
+        except: pass
+
 
 def delete_district_row(dist_id):
-    df = get_districts()
-    if not df.empty and 'id' in df.columns:
-        df = df[df['id'] != int(dist_id)]
-        s_sht, sid = get_loa_services()
-        if s_sht and sid:
-            s_sht.spreadsheets().values().clear(spreadsheetId=sid, range="districts!A1:Z").execute()
-            body = {"values": [df.columns.values.tolist()] + df.fillna('').values.tolist()}
-            if not df.empty:
-                s_sht.spreadsheets().values().update(spreadsheetId=sid, range="districts!A1", valueInputOption="USER_ENTERED", body=body).execute()
-            st.cache_data.clear()
+    sh = get_spreadsheet()
+    if sh:
+        try:
+            ws = sh.worksheet("districts")
+            records = ws.get_all_records()
+            for i, row in enumerate(records):
+                if str(row.get('id', '')) == str(dist_id):
+                    ws.delete_rows(i + 2)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    break
+        except: pass
+
 
 def get_training_records():
-    s_sht, sid = get_loa_services()
-    if not s_sht or not sid: return pd.DataFrame()
+    sh = get_spreadsheet()
+    if not sh: return pd.DataFrame()
     try:
-        r = s_sht.spreadsheets().values().get(spreadsheetId=sid, range="training_records!A1:Z").execute()
-        v = r.get("values", [])
-        if not v or len(v) < 2: return pd.DataFrame()
-        headers = v[0]
-        rows = [row + [""] * (len(headers) - len(row)) for row in v[1:]]
-        df = pd.DataFrame(rows, columns=headers)
+        ws = sh.worksheet("training_records")
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
         
-        df = df.dropna(how='all')
-        if 'id' in df.columns:
+        if not df.empty and 'id' in df.columns:
             df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
             df = df[df['id'] > 0]
-            
-            if 'nik' in df.columns:
-                df['nik'] = df['nik'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-            if 'phone' in df.columns:
-                df['phone'] = df['phone'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-            
+            if 'nik' in df.columns: df['nik'] = df['nik'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            if 'phone' in df.columns: df['phone'] = df['phone'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             df = df.drop_duplicates(subset=['training_date', 'nik', 'cert_no_sj', 'cert_no_in'], keep='first')
             return df.sort_values(by='id', ascending=False).reset_index(drop=True)
         return df
     except Exception as e:
-        st.error(f"❌ database.py gagal membaca tab 'training_records': {e}")
+        st.error(f"Gagal membaca tab training_records: {e}")
         return pd.DataFrame()
+
 
 def get_next_cert_number(airline):
     now = datetime.now()
@@ -163,11 +145,11 @@ def get_next_cert_number(airline):
         for c_val in valid_certs:
             if c_val.startswith(prefix_yymm) and len(c_val) == 8 and c_val[4:].isdigit():
                 seq_num = int(c_val[4:])
-                if seq_num > max_seq:
-                    max_seq = seq_num
+                if seq_num > max_seq: max_seq = seq_num
 
     next_seq = max_seq + 1
     return f"{prefix_yymm}{next_seq:04d}"
+
 
 def save_training_record(record_data):
     df = get_training_records()
@@ -175,75 +157,80 @@ def save_training_record(record_data):
     if not df.empty:
         cur_nik = str(record_data.get('nik', '')).strip()
         cur_date = str(record_data.get('training_date', ''))[:10]
-        existing = df[
-            (df['nik'].astype(str).str.strip() == cur_nik) &
-            (df['training_date'].astype(str).str[:10] == cur_date)
-        ]
-        if not existing.empty:
-            return False
+        existing = df[(df['nik'].astype(str).str.strip() == cur_nik) & (df['training_date'].astype(str).str[:10] == cur_date)]
+        if not existing.empty: return False
 
     next_id = 1 if df.empty else int(df['id'].max()) + 1
     record_data['id'] = next_id
 
-    target_dist_code = str(record_data.get('district', '')).strip()
-    target_dist_name = str(record_data.get('district_name', '')).strip()
-
-    new_row = pd.DataFrame([record_data])
-    updated_df = pd.concat([df, new_row], ignore_index=True).fillna('')
+    # Pastikan urutan list sesuai header
+    headers = [
+        "id", "training_date", "full_name", "nik", "phone",
+        "job_role", "company", "district", "district_full", "score", "status",
+        "cert_no_sj", "cert_no_in", "expiry_date"
+    ]
+    new_row = [record_data.get(h, "") for h in headers]
     
-    s_sht, sid = get_loa_services()
-    if s_sht and sid:
-        body = {"values": [updated_df.columns.values.tolist()] + updated_df.values.tolist()}
-        s_sht.spreadsheets().values().update(spreadsheetId=sid, range="training_records!A1", valueInputOption="USER_ENTERED", body=body).execute()
-
-    if record_data.get('status') == 'LULUS':
-        t_date = record_data['training_date']
+    sh = get_spreadsheet()
+    if sh:
         try:
-            dt_obj = datetime.strptime(str(t_date)[:10], "%Y-%m-%d").date()
-            next_due = dt_obj.replace(year=dt_obj.year + 2).strftime("%Y-%m-%d")
+            ws = sh.worksheet("training_records")
+            ws.append_row(new_row)
+        except: pass
 
-            df_dist = get_districts()
-            if target_dist_name:
-                m_idx = df_dist[(df_dist['code'] == target_dist_code) & (df_dist['name'] == target_dist_name)].index
-            else:
-                m_idx = df_dist[df_dist['code'] == target_dist_code].index
-
-            if not m_idx.empty:
-                df_dist.loc[m_idx, 'last_training_date'] = str(t_date)
-                df_dist.loc[m_idx, 'next_due_date'] = next_due
-                if s_sht and sid:
-                    d_body = {"values": [df_dist.columns.values.tolist()] + df_dist.fillna('').values.tolist()}
-                    s_sht.spreadsheets().values().update(spreadsheetId=sid, range="districts!A1", valueInputOption="USER_ENTERED", body=d_body).execute()
-        except Exception:
-            pass
+        if record_data.get('status') == 'LULUS':
+            t_date = record_data['training_date']
+            target_dist_code = str(record_data.get('district', '')).strip()
+            try:
+                dt_obj = datetime.strptime(str(t_date)[:10], "%Y-%m-%d").date()
+                next_due = dt_obj.replace(year=dt_obj.year + 2).strftime("%Y-%m-%d")
+                
+                ws_dist = sh.worksheet("districts")
+                d_records = ws_dist.get_all_records()
+                for i, row in enumerate(d_records):
+                    if str(row.get('code', '')).strip().upper() == target_dist_code.upper():
+                        row_idx = i + 2
+                        ws_dist.update(f"E{row_idx}:F{row_idx}", [[str(t_date), str(next_due)]])
+                        break
+            except: pass
 
     st.cache_data.clear()
+    st.cache_resource.clear()
     return True
 
+
 def delete_training_record(record_id):
-    df = get_training_records()
-    if not df.empty and 'id' in df.columns:
-        df = df[df['id'] != int(record_id)]
-        s_sht, sid = get_loa_services()
-        if s_sht and sid:
-            s_sht.spreadsheets().values().clear(spreadsheetId=sid, range="training_records!A1:Z").execute()
-            body = {"values": [df.columns.values.tolist()] + df.fillna('').values.tolist()}
-            if not df.empty:
-                s_sht.spreadsheets().values().update(spreadsheetId=sid, range="training_records!A1", valueInputOption="USER_ENTERED", body=body).execute()
-            st.cache_data.clear()
+    sh = get_spreadsheet()
+    if sh:
+        try:
+            ws = sh.worksheet("training_records")
+            records = ws.get_all_records()
+            for i, row in enumerate(records):
+                if str(row.get('id', '')) == str(record_id):
+                    ws.delete_rows(i + 2)
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+                    break
+        except: pass
+
 
 def reset_cert_sequence():
     st.cache_data.clear()
+    st.cache_resource.clear()
+
 
 def clear_all_training_records():
-    s_sht, sid = get_loa_services()
-    if s_sht and sid:
-        s_sht.spreadsheets().values().clear(spreadsheetId=sid, range="training_records!A1:Z").execute()
-        cols = [
-            "id", "training_date", "full_name", "nik", "phone",
-            "job_role", "company", "district", "district_full", "score", "status",
-            "cert_no_sj", "cert_no_in", "expiry_date"
-        ]
-        body = {"values": [cols]}
-        s_sht.spreadsheets().values().update(spreadsheetId=sid, range="training_records!A1", valueInputOption="USER_ENTERED", body=body).execute()
-        st.cache_data.clear()
+    sh = get_spreadsheet()
+    if sh:
+        try:
+            ws = sh.worksheet("training_records")
+            ws.clear()
+            headers = [
+                "id", "training_date", "full_name", "nik", "phone",
+                "job_role", "company", "district", "district_full", "score", "status",
+                "cert_no_sj", "cert_no_in", "expiry_date"
+            ]
+            ws.append_row(headers)
+            st.cache_data.clear()
+            st.cache_resource.clear()
+        except: pass
