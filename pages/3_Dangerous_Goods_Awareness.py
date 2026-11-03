@@ -24,16 +24,45 @@ from attendance_generator import generate_attendance_pdf, generate_attendance_ex
 from materi_module import render_materi_module
 
 # ==================== KONFIGURASI HALAMAN ====================
-
-
-
-
 st.set_page_config(
     page_title="DG Awareness Training - SJ & IN",
     layout="wide",
     page_icon="✈️",
     initial_sidebar_state="expanded"
 )
+
+# PERBAIKAN CSS: Sembunyikan Fork/Github, tapi GARIS TIGA (Menu) tetap aman dan melayang di HP
+st.markdown(
+    """
+    <style>
+    /* Sembunyikan tombol pojok kanan atas */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    /* Sembunyikan dekorasi garis atas warna-warni Streamlit (Opsional agar bersih) */
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+    /* Tombol menu garis tiga di kiri atas dibikin melayang dan jelas */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        z-index: 999999 !important;
+        background-color: #0b1d3a !important; /* Biru gelap */
+        border-radius: 8px !important;
+        padding: 5px !important;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.1) !important;
+        margin-top: 5px !important;
+        margin-left: 5px !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important; /* Ikon warna putih */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # Inisialisasi Session State Login Instruktur
 if "is_instructor" not in st.session_state:
@@ -43,67 +72,6 @@ if "is_instructor" not in st.session_state:
 if "current_page" not in st.session_state:
     st.session_state["current_page"] = "Modul Materi DG Awareness"
 
-# ==================== KONTROL TAMPILAN HEADER & MOBILE ====================
-if not st.session_state["is_instructor"]:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stToolbar"] {
-            display: none !important;
-        }
-        [data-testid="stDecoration"] {
-            display: none !important;
-        }
-        footer {
-            display: none !important;
-        }
-        [data-testid="stStatusWidget"],
-        .viewerBadge_container__1QSob,
-        .viewerBadge_link__1S137,
-        div[class*="viewerBadge"],
-        div[class*="ProfileBadge"],
-        div[class*="StatusWidget"],
-        div[data-testid="stActionButton"],
-        a[href*="share.streamlit.io/user"],
-        div[data-baseweb="popover"],
-        div[role="tooltip"],
-        #MainMenu {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
-        /* Tombol sidebar terlihat rapi di perangkat HP */
-        [data-testid="collapsedControl"] {
-            display: flex !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            z-index: 999999 !important;
-            top: 10px !important;
-            left: 10px !important;
-            background: #0E3B68 !important;
-            color: #ffffff !important;
-            border-radius: 8px !important;
-            padding: 4px !important;
-        }
-        [data-testid="collapsedControl"] svg {
-            fill: #ffffff !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-else:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stToolbar"] {
-            display: flex !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
 
 CATEGORY_OPTIONS = [
     "Sriwijaya Air",
@@ -118,6 +86,16 @@ CATEGORY_OPTIONS = [
 query_params = st.query_params
 
 if "cert" in query_params:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {display: none !important;}
+        [data-testid="collapsedControl"] {display: none !important;}
+        footer {display: none !important;}
+        </style>
+        """, unsafe_allow_html=True
+    )
+    
     cert_query = str(query_params["cert"]).strip()
 
     records_df = get_training_records()
@@ -163,7 +141,6 @@ if "cert" in query_params:
 
     if not matched.empty:
         rec = matched.iloc[0]
-        st.success("✅ **SERTIFIKAT RESMI TERVERIFIKASI & TERCATAT DI DATABASE (VALID)**")
 
         col_v1, col_v2 = st.columns(2)
         with col_v1:
@@ -514,7 +491,7 @@ elif menu == "Dashboard Instruktur & Records":
             if st.button("🔄 Refresh Data Cache", type="primary"):
                 reset_cert_sequence()
                 st.cache_data.clear()
-                st.cache_resource.clear() # Added to clear all cached dataframes!
+                st.cache_resource.clear()
                 st.success("✅ Cache berhasil dibersihkan!")
                 st.rerun()
 
