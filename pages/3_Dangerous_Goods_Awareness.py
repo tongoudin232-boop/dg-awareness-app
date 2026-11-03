@@ -32,22 +32,18 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL: Aman untuk Mobile (Hanya sembunyikan kanan, warnai kiri)
+# CSS SILUMAN: Toolbar dibuat transparan agar Sidebar selamat!
 # ==============================================================
 st.markdown(
     """
     <style>
     [data-testid="stToolbar"] {
-        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
-    .viewerBadge_container__1QSob,
-    .viewerBadge_link__1S137,
-    .viewerBadge_text__1JaDK {
-        display: none !important;
-    }
-    [data-testid="collapsedControl"] svg {
-        color: #0b1d3a !important;
-        fill: #0b1d3a !important;
+    [class*="viewerBadge"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     </style>
     """,

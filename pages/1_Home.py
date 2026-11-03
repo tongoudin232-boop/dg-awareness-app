@@ -8,27 +8,21 @@ st.set_page_config(
 )
 
 # ==============================================================
-# CSS FINAL: Aman untuk Mobile (Hanya sembunyikan kanan, warnai kiri)
+# CSS SILUMAN: Toolbar dibuat transparan agar Sidebar selamat!
 # ==============================================================
 st.markdown(
     """
     <style>
-    /* Sembunyikan bagian kanan header (Fork, Github, Menu titik tiga) secara halus */
+    /* Bikin tombol Fork/Github 100% transparan dan kebal klik */
     [data-testid="stToolbar"] {
-        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
-    /* Sembunyikan Badge / Label Streamlit Cloud di atas */
-    .viewerBadge_container__1QSob,
-    .viewerBadge_link__1S137,
-    .viewerBadge_text__1JaDK {
-        display: none !important;
-    }
-    
-    /* Pastikan tombol menu garis tiga di kiri BISA DILIHAT (Warna Biru Gelap) */
-    [data-testid="collapsedControl"] svg {
-        color: #0b1d3a !important;
-        fill: #0b1d3a !important;
+    /* Matikan juga tulisan "Hosted with Streamlit" */
+    [class*="viewerBadge"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     </style>
     """,
