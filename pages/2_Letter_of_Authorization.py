@@ -9,6 +9,7 @@ import time
 import base64
 import json
 import urllib.request
+import glob
 
 try:
     from PyPDF2 import PdfReader, PdfWriter, Transformation
@@ -120,6 +121,7 @@ def init_google_resources():
 
 service_sheets, service_drive, SPREADSHEET_ID, FOLDER_FOTO_ID, FOLDER_LICENSE_ID = init_google_resources()
 
+
 # ---------------------------------------------------------
 # MASTER DISTRIK PERMANEN (SAFE & ROBUST)
 # ---------------------------------------------------------
@@ -127,10 +129,7 @@ DISTRIK_FILE = "distrik_db.json"
 DISTRIK_TAB_NAME = "MasterDistrik"
 
 def load_distrik():
-    default_d = [
-        "CGK - Jakarta", "SUB - Surabaya", "DPS - Denpasar", 
-        "KNO - Medan", "UPG - Makassar", "PLM - Palembang"
-    ]
+    default_d = ["CGK - Jakarta", "SUB - Surabaya", "DPS - Denpasar", "KNO - Medan", "UPG - Makassar", "PLM - Palembang"]
     if service_sheets and SPREADSHEET_ID:
         try:
             sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -176,7 +175,6 @@ def load_distrik():
     return default_d
 
 def save_distrik(distrik_list):
-    # Hilangkan duplikat
     distrik_list = list(dict.fromkeys([d.strip() for d in distrik_list if str(d).strip()]))
     try:
         with open(DISTRIK_FILE, "w", encoding="utf-8") as f:
@@ -196,7 +194,6 @@ def save_distrik(distrik_list):
                     body={"requests": [{"addSheet": {"properties": {"title": DISTRIK_TAB_NAME}}}]}
                 ).execute()
             else:
-                # Kosongkan dulu baris lama agar tidak ada sisa duplikat di bawahnya
                 service_sheets.spreadsheets().values().clear(
                     spreadsheetId=SPREADSHEET_ID,
                     range=f"{DISTRIK_TAB_NAME}!A1:A1000"
@@ -296,6 +293,92 @@ def load_data_peserta():
         
     return pd.DataFrame(columns=SHEET_COLUMNS)
 
+
+# =========================================================
+# 🔴 PORTAL VERIFIKASI QR CODE KHUSUS LoA 
+# =========================================================
+query_params = st.query_params
+if "loa" in query_params:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {display: none !important;}
+        [data-testid="stToolbar"] {display: none !important;}
+        [data-testid="stDecoration"] {display: none !important;}
+        footer {display: none !important;}
+        </style>
+        """, unsafe_allow_html=True
+    )
+    
+    loa_query = str(query_params["loa"]).strip()
+    df_verif = load_data_peserta()
+    matched = pd.DataFrame()
+    
+    if not df_verif.empty:
+        matched = df_verif[
+            (df_verif['no_loa_sj'].astype(str).str.strip() == loa_query) | 
+            (df_verif['no_loa_in'].astype(str).str.strip() == loa_query)
+        ]
+        
+    col_vlogo1, col_vtitle, col_vlogo2 = st.columns([1.5, 5, 1.5])
+    with col_vlogo1:
+        if os.path.exists("logo_sriwijaya.png"): st.image("logo_sriwijaya.png", use_container_width=True)
+    with col_vtitle:
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 10px 0;">
+                <h2 style="color: #0E3B68; margin-bottom: 0px;">✈️ Portal Verifikasi LoA</h2>
+                <h5 style="color: #6C757D; margin-top: 5px;">Sriwijaya Air & NAM Air Cargo</h5>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    with col_vlogo2:
+        if os.path.exists("logo_namair.png"): st.image("logo_namair.png", use_container_width=True)
+
+    st.markdown("<hr style='border: 1px solid #E0E0E0;'>", unsafe_allow_html=True)
+
+    if not matched.empty:
+        rec = matched.iloc[0]
+        
+        try:
+            valid_dt = datetime.strptime(str(rec["loa_valid_until"]).strip(), "%Y-%m-%d").date()
+            if valid_dt >= date.today():
+                st.success("✅ **SURAT KUASA (LoA) RESMI TERVERIFIKASI & AKTIF**")
+            else:
+                st.error("❌ **SURAT KUASA (LoA) INI TELAH KEDALUWARSA (EXPIRED)**")
+        except:
+            st.warning("⚠️ Status masa berlaku LoA tidak terdeteksi.")
+        
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            st.markdown(f"**Nama Petugas:** {rec['nama']}")
+            st.markdown(f"**NIK / Employee ID:** {rec['nik_emp']}")
+            st.markdown(f"**Perusahaan:** {rec['perusahaan']}")
+            st.markdown(f"**Jabatan:** {rec['jabatan']}")
+        with col_v2:
+            st.markdown(f"**Role DG:** `{rec['role']}`")
+            st.markdown(f"**Distrik Penugasan:** {rec['distrik']}")
+            st.markdown(f"**Masa Berlaku LoA (Valid Until):** `{rec['loa_valid_until']}`")
+            st.markdown(f"**No. LoA Terscan:** `{loa_query}`")
+
+        # Tampilkan Foto Peserta jika ada
+        foto_url = str(rec.get("url_foto", "")).strip()
+        nomor = str(rec.get("nomor_induk", ""))
+        foto_local = ""
+        matches = glob.glob(f"uploads/FOTO_{nomor}*")
+        if matches: foto_local = matches[0]
+        
+        if foto_local and os.path.exists(foto_local):
+            st.image(foto_local, caption=f"Foto {rec['nama']}", width=150)
+            
+    else:
+        st.error("❌ **DATA LoA TIDAK DITEMUKAN!**")
+        st.warning(f"Nomor LoA '{loa_query}' tidak terdaftar pada sistem database resmi Sriwijaya Air & NAM Air Cargo.")
+        
+    st.stop()
+# =========================================================
+
+
 def save_new_peserta(d):
     if service_sheets and SPREADSHEET_ID:
         try:
@@ -383,7 +466,7 @@ def generate_nomor_loa(df_all, carrier):
     return f"{cl:04d}/LOA/{ct}/{romawi}/{today.year}"
 
 # ---------------------------------------------------------
-# GENERATOR LIVE PDF TAMPING OVERLAY
+# GENERATOR LIVE PDF TAMPING OVERLAY & QR CODE
 # ---------------------------------------------------------
 def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     """ Memperbesar template asli menjadi A4 Penuh dan menempatkan teks dengan koordinat presisi final """
@@ -489,16 +572,20 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
     can.setFont(font_utama, 18)
     can.drawCentredString(a4_w * 0.14, a4_h * 0.13, f"{valid_date_fmt}")
     
-    # TANGGAL TERBIT (Dinaikkan ke Y=0.33 agar berjarak dengan QR)
+    # TANGGAL TERBIT
     can.setFont(font_tgl, 12) 
     can.drawCentredString(a4_w * 0.76, a4_h * 0.315, f"Tangerang, {tgl_terbit_fmt}")
     
-    # QR CODE VERIFIKASI (Diturunkan ke Y=0.14)
-    verify_text = f"VERIFIKASI RESMI LOA\nNo: {no_loa}\nNama: {p.get('nama', '-')}\nNIK: {p.get('nik_emp', '-')}\nRole: {role_str}\nValid: {valid_date_fmt}\nStatus: VERIFIED"
+    # -------------------------------------------------------------------------
+    # MENGUBAH QR CODE MENJADI URL APLIKASI (SISTEM VERIFIKASI)
+    # -------------------------------------------------------------------------
+    # Sebelumnya menggunakan teks acak, sekarang menggunakan URL resmi ke aplikasi
+    verify_url = f"https://sjnam-cargo.streamlit.app/Letter_of_Authorization?loa={no_loa}"
+    
     try:
         import qrcode
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=2) 
-        qr.add_data(verify_text)
+        qr.add_data(verify_url)
         qr.make(fit=True)
         
         qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
@@ -512,6 +599,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size)
     except Exception:
         pass
+        
     can.save()
     packet.seek(0)
     overlay_pdf = PdfReader(packet)
@@ -734,7 +822,7 @@ elif sub_menu == "3. Ujian Penilaian Kompetensi LoA (Publik)":
                 if st_verif == "pending": st.warning("⏳ Pengajuan Anda masih dalam status 'Pending' verifikasi admin.")
                 elif st_verif == "rejected": st.error(f"❌ Pengajuan Anda ditolak. Catatan: {p.get('catatan_admin', '-')}")
                 elif st_verif == "approved":
-                    if True: # (Previously tab_ujian)
+                    if True: 
                         if str(p.get("status_ujian", "")).strip().lower() == "lulus":
                             st.markdown("---")
                             st.header("📄 Download Dokumen Letter of Authorization (LoA) Resmi")
