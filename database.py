@@ -18,7 +18,8 @@ def get_gspread_client():
             creds_dict = dict(st.secrets)
             
         if "private_key" in creds_dict:
-            creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\\n", "\n")
+            creds_dict["private_key"] = str(creds_dict["private_key"]).replace("\n", "
+")
             
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         client = gspread.authorize(credentials)
@@ -30,17 +31,62 @@ def get_gspread_client():
 def get_spreadsheet():
     client = get_gspread_client()
     if not client: return None
+    
+    # KITA PAKSA MENGGUNAKAN SPREADSHEET MILIK SERVICE ACCOUNT SENDIRI
+    # UNTUK MENGHINDARI ERROR 404 PERMISSIONS
     try:
-        sid = ""
-        if "google_drive" in st.secrets:
-            sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip()
+        sh = client.open("DG_Awareness_Database")
+        
+        # Share spreadsheet ini ke email Gmail user agar mereka bisa buka
+        try:
+            sh.share('tongoudin232@gmail.com', perm_type='user', role='writer')
+        except:
+            pass # abaikan jika sudah di-share
             
-        if sid:
-            return client.open_by_key(sid)
-        else:
-            return client.open("DG_Awareness_Database")
+        st.success(f"✅ Terhubung ke Database Cloud Internal: [Buka Google Sheets]({sh.url})")
+        st.info("💡 Karena Google memblokir akses ke file lama Anda, sistem otomatis membuatkan file database baru. Silakan klik link di atas, buka file-nya, lalu **COPY-PASTE** isi tabel lama Anda ke file yang baru ini.")
+        
+        # Buat tab jika belum ada
+        try:
+            sh.worksheet("districts")
+        except:
+            sh.add_worksheet("districts", 1000, 26)
+            sh.worksheet("districts").append_row(["id", "code", "name", "category", "last_training_date", "next_due_date"])
+            
+        try:
+            sh.worksheet("training_records")
+        except:
+            sh.add_worksheet("training_records", 1000, 26)
+            sh.worksheet("training_records").append_row([
+                "id", "training_date", "full_name", "nik", "phone",
+                "job_role", "company", "district", "district_full", "score", "status",
+                "cert_no_sj", "cert_no_in", "expiry_date"
+            ])
+            
+        return sh
+    except gspread.exceptions.SpreadsheetNotFound:
+        # Jika belum ada sama sekali, buat baru
+        sh = client.create("DG_Awareness_Database")
+        sh.share('tongoudin232@gmail.com', perm_type='user', role='writer')
+        
+        sh.add_worksheet("districts", 1000, 26)
+        sh.worksheet("districts").append_row(["id", "code", "name", "category", "last_training_date", "next_due_date"])
+        
+        sh.add_worksheet("training_records", 1000, 26)
+        sh.worksheet("training_records").append_row([
+            "id", "training_date", "full_name", "nik", "phone",
+            "job_role", "company", "district", "district_full", "score", "status",
+            "cert_no_sj", "cert_no_in", "expiry_date"
+        ])
+        
+        try:
+            sh.del_worksheet(sh.worksheet("Sheet1"))
+        except: pass
+        
+        st.success(f"✅ Database Cloud Internal Berhasil Dibuat: [Buka Google Sheets]({sh.url})")
+        return sh
     except Exception as e:
-        st.error(f"❌ Gagal membuka Spreadsheet: {e}. (Cek kembali ID atau Akses Share!)")
+        st.error(f"❌ Terjadi kesalahan saat menyiapkan database internal: {e}")
         return None
 
 def get_connection(): return None
