@@ -35,9 +35,10 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* 1. Bantai tombol Fork, Github, dan Menu Titik Tiga (Aman, tidak meruntuhkan header HP) */
-    .stAppDeployButton, #MainMenu {
-        display: none !important;
+    /* 1. Bantai tombol Fork, Github, dan Menu Titik Tiga (Dibuat transparan kaca agar header HP tetap utuh!) */
+    [data-testid="stToolbar"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
     /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
