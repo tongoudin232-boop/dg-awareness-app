@@ -43,12 +43,13 @@ if "current_page" not in st.session_state:
 st.markdown(
     """
     <style>
-    /* 1. Bantai tombol Fork, Github, dan Menu Titik Tiga (Aman, tidak meruntuhkan header HP) */
-    .stAppDeployButton, #MainMenu {
-        display: none !important;
+    /* 1. Bikin wadah kanan (Fork, Github, Titik Tiga) jadi 100% transparan dan kebal klik */
+    [data-testid="stToolbar"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
-    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
+    /* 2. Matikan logo Hosted with Streamlit di bawah */
     .viewerBadge_container__1QSob,
     [class*="viewerBadge"] {
         display: none !important;
