@@ -43,13 +43,14 @@ if "current_page" not in st.session_state:
 st.markdown(
     """
     <style>
-    /* 1. Bikin wadah kanan (Fork, Github, Titik Tiga) jadi 100% transparan dan kebal klik */
+    /* 1. Bantai TOTAL seluruh wadah kanan (Fork, Github, Titik Tiga) dengan mode siluman (tidak merusak kerangka) */
     [data-testid="stToolbar"] {
+        visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
     }
     
-    /* 2. Matikan logo Hosted with Streamlit di bawah */
+    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
     .viewerBadge_container__1QSob,
     [class*="viewerBadge"] {
         display: none !important;
