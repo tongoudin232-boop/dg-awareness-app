@@ -40,66 +40,33 @@ if "current_page" not in st.session_state:
     st.session_state["current_page"] = "Modul Materi DG Awareness"
 
 # ==================== KONTROL TAMPILAN HEADER & MOBILE ====================
-if not st.session_state["is_instructor"]:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stToolbar"] {
-            display: none !important;
-        }
-        [data-testid="stDecoration"] {
-            display: none !important;
-        }
-        footer {
-            display: none !important;
-        }
-        [data-testid="stStatusWidget"],
-        .viewerBadge_container__1QSob,
-        .viewerBadge_link__1S137,
-        div[class*="viewerBadge"],
-        div[class*="ProfileBadge"],
-        div[class*="StatusWidget"],
-        div[data-testid="stActionButton"],
-        a[href*="share.streamlit.io/user"],
-        div[data-baseweb="popover"],
-        div[role="tooltip"],
-        #MainMenu {
-            display: none !important;
-            visibility: hidden !important;
-            opacity: 0 !important;
-            pointer-events: none !important;
-        }
-        /* Tombol sidebar terlihat rapi di perangkat HP */
-        [data-testid="collapsedControl"] {
-            display: flex !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            z-index: 999999 !important;
-            top: 10px !important;
-            left: 10px !important;
-            background: #0E3B68 !important;
-            color: #ffffff !important;
-            border-radius: 8px !important;
-            padding: 4px !important;
-        }
-        [data-testid="collapsedControl"] svg {
-            fill: #ffffff !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-else:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stToolbar"] {
-            display: flex !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+st.markdown(
+    """
+    <style>
+    /* 1. Bantai tombol Fork, Github, dan Menu Titik Tiga (Aman, tidak meruntuhkan header HP) */
+    .stAppDeployButton, #MainMenu {
+        display: none !important;
+    }
+    
+    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
+    .viewerBadge_container__1QSob,
+    [class*="viewerBadge"] {
+        display: none !important;
+    }
+
+    /* 3. Sembunyikan menu "app" dari sidebar */
+    [data-testid="stSidebarNav"] ul li:first-child {
+        display: none !important;
+    }
+    
+    /* 4. Sembunyikan garis warna-warni atas dan footer bawaan Streamlit */
+    [data-testid="stDecoration"], footer {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 CATEGORY_OPTIONS = [
     "Sriwijaya Air",
@@ -509,6 +476,8 @@ elif menu == "Dashboard Instruktur & Records":
             st.caption("Membersihkan cache internal agar data Google Sheets termutakhir langsung terbaca.")
             if st.button("🔄 Refresh Data Cache", type="primary"):
                 reset_cert_sequence()
+                st.cache_data.clear()
+                st.cache_resource.clear()
                 st.success("✅ Cache berhasil dibersihkan!")
                 st.rerun()
 
