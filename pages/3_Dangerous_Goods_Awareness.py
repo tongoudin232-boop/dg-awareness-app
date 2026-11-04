@@ -127,6 +127,7 @@ if "cert" in query_params:
 
     if not matched.empty:
         rec = matched.iloc[0]
+        st.success("✅ **SERTIFIKAT RESMI TERVERIFIKASI & TERCATAT DI DATABASE (VALID)**")
 
         col_v1, col_v2 = st.columns(2)
         with col_v1:
