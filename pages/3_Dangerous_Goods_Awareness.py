@@ -35,24 +35,48 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* 1. Bantai tombol Fork, Github, dan Menu Titik Tiga (Dibuat transparan kaca agar header HP tetap utuh!) */
-    [data-testid="stToolbar"] {
+    /* 1. BERI TIANG PENYANGGA PADA HEADER AGAR TIDAK KEMPIS SAAT TOMBOL KANAN HILANG */
+    [data-testid="stHeader"] {
+        min-height: 4.5rem !important;
+        background: transparent !important;
+    }
+    
+    /* 2. JADIKAN TOMBOL KANAN (FORK, GITHUB, TITIK TIGA) KACA/TRANSPARAN (KEBAL KLIK) */
+    [data-testid="stToolbarActions"],
+    .stAppDeployButton,
+    #MainMenu {
         opacity: 0 !important;
         pointer-events: none !important;
     }
     
-    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
-    .viewerBadge_container__1QSob,
+    /* 3. MUNCULKAN PANAH SIDEBAR DENGAN KOTAK BIRU GELAP AGAR KONTRAS */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: #0b1d3a !important;
+        border-radius: 8px !important;
+        padding: 5px !important;
+        margin-top: 5px !important;
+        margin-left: 5px !important;
+        z-index: 999999 !important;
+    }
+    [data-testid="collapsedControl"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+    
+    /* 4. MATIKAN TULISAN "HOSTED WITH STREAMLIT" DI POJOK BAWAH */
     [class*="viewerBadge"] {
         display: none !important;
     }
 
-    /* 3. Sembunyikan menu "app" dari sidebar */
+    /* 5. SEMBUNYIKAN MENU "APP" DI SIDEBAR */
     [data-testid="stSidebarNav"] ul li:first-child {
         display: none !important;
     }
     
-    /* 4. Sembunyikan garis warna-warni atas dan footer bawaan Streamlit */
+    /* 6. SEMBUNYIKAN GARIS WARNA-WARNI & FOOTER STREAMLIT */
     [data-testid="stDecoration"], footer {
         display: none !important;
     }
