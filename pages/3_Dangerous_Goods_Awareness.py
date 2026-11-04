@@ -31,20 +31,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==============================================================
-# CSS FINAL: KEMBALI KE BASIC. JANGAN SENTUH HEADER SAMA SEKALI.
-# ==============================================================
+# ==================== KONTROL TAMPILAN HEADER & MOBILE ====================
 st.markdown(
     """
     <style>
-    .stAppDeployButton {
+    /* 1. Bantai tombol Fork, Github, dan Menu Titik Tiga (Aman, tidak meruntuhkan header HP) */
+    .stAppDeployButton, #MainMenu {
         display: none !important;
     }
+    
+    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
     .viewerBadge_container__1QSob,
     [class*="viewerBadge"] {
         display: none !important;
     }
+
+    /* 3. Sembunyikan menu "app" dari sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
+        display: none !important;
+    }
+    
+    /* 4. Sembunyikan garis warna-warni atas dan footer bawaan Streamlit */
+    [data-testid="stDecoration"], footer {
         display: none !important;
     }
     </style>
@@ -74,16 +82,6 @@ CATEGORY_OPTIONS = [
 query_params = st.query_params
 
 if "cert" in query_params:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stSidebar"] {display: none !important;}
-        [data-testid="collapsedControl"] {display: none !important;}
-        footer {display: none !important;}
-        </style>
-        """, unsafe_allow_html=True
-    )
-    
     cert_query = str(query_params["cert"]).strip()
 
     records_df = get_training_records()

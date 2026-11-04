@@ -33,20 +33,30 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==============================================================
-# CSS FINAL: KEMBALI KE BASIC. JANGAN SENTUH HEADER SAMA SEKALI.
-# ==============================================================
+# ==================== KONTROL TAMPILAN HEADER & MOBILE ====================
 st.markdown(
     """
     <style>
-    .stAppDeployButton {
-        display: none !important;
+    /* 1. Bantai TOTAL seluruh wadah kanan (Fork, Github, Titik Tiga) dengan mode siluman (tidak merusak kerangka) */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
+    
+    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
     .viewerBadge_container__1QSob,
     [class*="viewerBadge"] {
         display: none !important;
     }
+
+    /* 3. Sembunyikan menu "app" dari sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
+        display: none !important;
+    }
+    
+    /* 4. Sembunyikan garis warna-warni atas dan footer bawaan Streamlit */
+    [data-testid="stDecoration"], footer {
         display: none !important;
     }
     </style>
@@ -323,7 +333,7 @@ if "loa" in query_params:
         """
         <style>
         [data-testid="stSidebar"] {display: none !important;}
-        .stAppDeployButton {display: none !important;}
+        [data-testid="stToolbar"] {opacity: 0 !important; pointer-events: none !important;}
         [data-testid="stDecoration"] {display: none !important;}
         footer {display: none !important;}
         </style>

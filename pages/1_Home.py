@@ -7,18 +7,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==============================================================
-# CSS FINAL: KEMBALI KE BASIC. JANGAN SENTUH HEADER SAMA SEKALI.
-# ==============================================================
+# ==================== KONTROL TAMPILAN HEADER & MOBILE ====================
 st.markdown(
     """
     <style>
-    /* 1. HANYA tembak wadah Fork & Github bawaan Streamlit Cloud */
-    .stAppDeployButton {
-        display: none !important;
+    /* 1. Bantai TOTAL seluruh wadah kanan (Fork, Github, Titik Tiga) dengan mode siluman (tidak merusak kerangka) */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
-    /* 2. Matikan logo Hosted with Streamlit di bawah */
+    /* 2. Bantai tulisan Hosted with Streamlit di pojok bawah */
     .viewerBadge_container__1QSob,
     [class*="viewerBadge"] {
         display: none !important;
@@ -26,6 +26,11 @@ st.markdown(
 
     /* 3. Sembunyikan menu "app" dari sidebar */
     [data-testid="stSidebarNav"] ul li:first-child {
+        display: none !important;
+    }
+    
+    /* 4. Sembunyikan garis warna-warni atas dan footer bawaan Streamlit */
+    [data-testid="stDecoration"], footer {
         display: none !important;
     }
     </style>
