@@ -326,14 +326,19 @@ def load_data_peserta():
             
             r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{target_sheet}!A1:V").execute()
             v = r.get("values", [])
+            
+            # PERBAIKAN: Jika terhubung sukses ke Sheets, pakai data dari Sheets (walau kosong).
+            # JANGAN bangkitkan data lokal jika Sheets sengaja dikosongkan.
+            df = pd.DataFrame(columns=SHEET_COLUMNS)
             if v and len(v) > 1:
                 h = v[0]
                 c_r = [row + [""] * (len(h) - len(row)) for row in v[1:]]
                 df = pd.DataFrame(c_r, columns=h)
                 for col in SHEET_COLUMNS:
                     if col not in df.columns: df[col] = ""
-                return df
+            return df
         except Exception:
+            # Jika BENAR-BENAR error (bukan kosong), baru pakai lokal
             pass 
             
     if not st.session_state.local_peserta_loa:
@@ -486,23 +491,40 @@ def update_peserta(no_id, uf):
     except: return False
 
 def delete_peserta_trial(no_id):
+    success_local = False
+    success_cloud = False
+    
+    # PERBAIKAN: Selalu bersihkan data Zombie dari JSON lokal terlebih dahulu
     if "local_peserta_loa" in st.session_state:
+        awal = len(st.session_state.local_peserta_loa)
         st.session_state.local_peserta_loa = [p for p in st.session_state.local_peserta_loa if str(p.get("nomor_induk", "")).strip() != str(no_id).strip()]
-    if not service_sheets or not SPREADSHEET_ID: return True
+        if len(st.session_state.local_peserta_loa) < awal:
+            save_local_db(st.session_state.local_peserta_loa)
+            success_local = True
+
+    if not service_sheets or not SPREADSHEET_ID: 
+        return success_local
+        
     try:
         r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:V").execute()
         v = r.get("values", [])
-        if not v: return False
+        if not v: 
+            return success_local
         ri = -1
         for i, row in enumerate(v):
             if row and str(row[0]).strip() == str(no_id).strip(): ri = i + 1; break
+            
         if ri != -1:
             sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sid = next(s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME)
-            service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri - 1, "endIndex": ri}}}]}).execute()
-            return True
-        return False
-    except: return False
+            sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME), None)
+            
+            if sid is not None:
+                service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri - 1, "endIndex": ri}}}]}).execute()
+                success_cloud = True
+                
+        return success_local or success_cloud
+    except Exception as e: 
+        return success_local
 
 def generate_nomor_induk(df_all):
     prefix = f"LOA{date.today().strftime('%m%y')}"
@@ -634,7 +656,7 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_size = a4_w * 0.11 
         qr_x = (a4_w * 0.76) - (qr_size / 2) 
         qr_y = a4_h * 0.14 
-        # HAPUS WARNA PUTIH (MASKING RGB) AGAR QR CODE 100% TRANSPARAN!
+        # PERBAIKAN: Hapus warna putih dari latar belakang QR Code (Masking RGB Transparan)
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size, mask=[250, 255, 250, 255, 250, 255])
     except Exception: pass
         
