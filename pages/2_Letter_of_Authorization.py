@@ -634,7 +634,8 @@ def create_pdf_loa(template_path, p, carrier, valid_date_fmt, tgl_terbit_fmt):
         qr_size = a4_w * 0.11 
         qr_x = (a4_w * 0.76) - (qr_size / 2) 
         qr_y = a4_h * 0.14 
-        can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size)
+        # MENGGUNAKAN mask='auto' AGAR BACKGROUND PUTIH QR CODE JADI TRANSPARAN!
+        can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size, mask='auto')
     except Exception: pass
         
     can.save()
