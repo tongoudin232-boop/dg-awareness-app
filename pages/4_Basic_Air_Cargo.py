@@ -66,11 +66,9 @@ TAB_NAME_BASIC = "Training_Records_Basic"
 LOCAL_DB_BASIC = "basic_records.json"
 SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_role", "company", "district", "district_name", "district_full", "score", "status", "cert_no_sj", "cert_no_in", "expiry_date", "jawaban_ujian"]
 
-TAB_DISTRICTS_BASIC = "districts_ basic"
 LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
-# KUNCI MATI SPREADSHEET ID LANGSUNG DARI URL ANDA
 SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
 
 def get_credentials():
@@ -91,11 +89,27 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
-def get_districts_basic():
+# FUNGSI PINTAR: DETEKSI NAMA TAB DISTRIK OTOMATIS DARI GOOGLE SHEETS
+def get_actual_district_tab_name():
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
+            meta = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+            sheets = meta.get('sheets', [])
+            for s in sheets:
+                title = s.get('properties', {}).get('title', '')
+                if 'district' in title.lower() and 'basic' in title.lower():
+                    return title
+        except: pass
+    return "districts_basic"
+
+TAB_DISTRICTS_BASIC = get_actual_district_tab_name()
+
+# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
+def get_districts_basic():
+    tab_target = get_actual_district_tab_name()
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1:F").execute()
             v = r.get("values", [])
             if v and len(v) > 1:
                 df = pd.DataFrame(v[1:], columns=v[0])
@@ -116,6 +130,7 @@ def get_districts_basic():
     return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
 
 def add_district_basic(code, name, category):
+    tab_target = get_actual_district_tab_name()
     df = get_districts_basic()
     new_id = 1
     if not df.empty and 'id' in df.columns:
@@ -126,7 +141,7 @@ def add_district_basic(code, name, category):
         try:
             rv = [str(new_id), code, name, category, "", ""]
             service_sheets.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1",
+                spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
         except: pass
@@ -138,32 +153,34 @@ def add_district_basic(code, name, category):
     return True
 
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
+    tab_target = get_actual_district_tab_name()
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1:F").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
                 if row and str(row[0]).strip() == str(dist_id).strip(): ri = i + 1; break
             if ri != -1:
                 service_sheets.spreadsheets().values().update(
-                    spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!B{ri}:F{ri}",
+                    spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!B{ri}:F{ri}",
                     valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
                 ).execute()
         except: pass
     return True
 
 def delete_district_row_basic(dist_id):
+    tab_target = get_actual_district_tab_name()
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:A").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1:A").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
                 if row and str(row[0]).strip() == str(dist_id).strip(): ri = i; break
             if ri != -1:
                 sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-                sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_DISTRICTS_BASIC), None)
+                sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == tab_target), None)
                 if sid is not None:
                     service_sheets.spreadsheets().batchUpdate(
                         spreadsheetId=SPREADSHEET_ID, 
