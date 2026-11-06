@@ -70,6 +70,9 @@ TAB_DISTRICTS_BASIC = "districts_basic"
 LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
+# KUNCI MATI SPREADSHEET ID LANGSUNG DARI URL ANDA
+SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
+
 def get_credentials():
     try:
         creds_info = dict(st.secrets["gcp_service_account"]) if "gcp_service_account" in st.secrets else dict(st.secrets)
@@ -83,13 +86,12 @@ def init_google_sheets():
     if not creds: return None, None
     try:
         s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
-        sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip() if "google_drive" in st.secrets else ""
-        return s_sht, sid
+        return s_sht, SPREADSHEET_ID_FIXED
     except: return None, None
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO (DENGAN LOCAL FALLBACK) ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
         try:
@@ -99,21 +101,18 @@ def get_districts_basic():
                 df = pd.DataFrame(v[1:], columns=v[0])
                 for col in SHEET_COLUMNS_DISTRICTS:
                     if col not in df.columns: df[col] = ""
-                # Simpan cadangan ke local json
                 try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
                 except: pass
                 return df
         except Exception as e:
-            st.warning(f"⚠️ Mode Offline / Gagal sinkron Google Sheets: {e}")
+            st.warning(f"⚠️ Gagal sinkron Google Sheets: {e}")
             
-    # Fallback ke file JSON lokal jika ada
     if os.path.exists(LOCAL_DISTRICTS_BASIC):
         try:
             df = pd.read_json(LOCAL_DISTRICTS_BASIC, orient="records")
             if not df.empty: return df
         except: pass
         
-    # Default data jika benar-benar kosong
     return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
 
 def add_district_basic(code, name, category):
@@ -132,7 +131,6 @@ def add_district_basic(code, name, category):
             ).execute()
         except: pass
         
-    # Update local json juga
     new_row = {"id": new_id, "code": code, "name": name, "category": category, "last_training_date": "", "next_due_date": ""}
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
@@ -475,7 +473,7 @@ if menu == "Modul Materi Basic Cargo":
         st.write("Kargo adalah semua barang (goods) yang dikirim melalui udara, laut, atau darat baik antar wilayah/kota di dalam negeri maupun antar negara dilengkapi dengan dokumen pengangkutan.")
         st.subheader("2. Jenis-jenis Cargo (Type of Cargo)")
         st.markdown("**A. General Cargo**\nBerupa barang-barang umum yang tidak membutuhkan penanganan secara khusus, namun wajib memenuhi persyaratan dalam aspek safety dan security.")
-        st.markdown("**B. Special Cargo**\nKiriman yang membutuhkan penanganan secara khusus (special handling) baik dari sisi penerimaan, penyimpanan, dan pengangkutan.")
+        st.markdown("**B. Special Cargo**\nKiriman yang membutuhkan penanganan khusus (special handling) baik dari sisi penerimaan, penyimpanan, dan pengangkutan.")
 
     with t2:
         st.subheader("Rincian Kategori Special Cargo")
@@ -944,7 +942,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
             if new_code and new_name:
                 add_district_basic(new_code.upper().strip(), new_name.strip(), new_cat)
                 st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!")
-                time.sleep(1)
-                st.rerun()
+                time.sleep(1); st.rerun()
             else:
                 st.error("Mohon isi kode dan nama distrik terlebih dahulu.")
