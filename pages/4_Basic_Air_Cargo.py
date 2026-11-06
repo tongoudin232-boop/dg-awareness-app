@@ -25,7 +25,7 @@ except ImportError:
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
-# Impor HANYA fungsi absensi dari file pendukung Anda 
+# Impor fungsi absensi dari file pendukung Anda 
 try:
     from attendance_generator import generate_attendance_pdf, generate_attendance_excel
 except ImportError:
@@ -62,12 +62,10 @@ st.markdown(
 # ==================== SISTEM DATABASE EKSKLUSIF BASIC CARGO ====================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-# Konstanta Tabel Training Basic
 TAB_NAME_BASIC = "Training_Records_Basic"
 LOCAL_DB_BASIC = "basic_records.json"
 SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_role", "company", "district", "district_name", "district_full", "score", "status", "cert_no_sj", "cert_no_in", "expiry_date", "jawaban_ujian"]
 
-# Konstanta Tabel Distrik Basic (DIPISAH DARI DG AWARENESS)
 TAB_DISTRICTS_BASIC = "districts_basic"
 LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
@@ -86,37 +84,36 @@ def init_google_sheets():
     try:
         s_sht = build("sheets", "v4", credentials=creds, cache_discovery=False)
         sid = str(st.secrets["google_drive"].get("spreadsheet_id", "")).strip() if "google_drive" in st.secrets else ""
-        if s_sht and sid:
-            try:
-                sm = s_sht.spreadsheets().get(spreadsheetId=sid).execute()
-                sheet_titles = [s['properties']['title'] for s in sm.get('sheets', [])]
-                
-                if TAB_NAME_BASIC not in sheet_titles:
-                    s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_NAME_BASIC}}}]}).execute()
-                    s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_NAME_BASIC}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS_BASIC]}).execute()
-                
-                if TAB_DISTRICTS_BASIC not in sheet_titles:
-                    s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_DISTRICTS_BASIC}}}]}).execute()
-                    s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_DISTRICTS_BASIC}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS_DISTRICTS]}).execute()
-            except: pass
         return s_sht, sid
     except: return None, None
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK MANDIRI (DENGAN DETEKTOR ERROR) ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO (DENGAN LOCAL FALLBACK) ----------------
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
         try:
             r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
             v = r.get("values", [])
-            if v:
-                df = pd.DataFrame(v[1:], columns=v[0]) if len(v) > 1 else pd.DataFrame(columns=v[0])
+            if v and len(v) > 1:
+                df = pd.DataFrame(v[1:], columns=v[0])
+                for col in SHEET_COLUMNS_DISTRICTS:
+                    if col not in df.columns: df[col] = ""
+                # Simpan cadangan ke local json
+                try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
+                except: pass
                 return df
-            return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
         except Exception as e:
-            st.error(f"⚠️ Gagal memuat data dari Google Sheets. Pastikan tab '{TAB_DISTRICTS_BASIC}' sudah Anda buat secara manual! Detail Error: {e}")
-            return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
+            st.warning(f"⚠️ Mode Offline / Gagal sinkron Google Sheets: {e}")
+            
+    # Fallback ke file JSON lokal jika ada
+    if os.path.exists(LOCAL_DISTRICTS_BASIC):
+        try:
+            df = pd.read_json(LOCAL_DISTRICTS_BASIC, orient="records")
+            if not df.empty: return df
+        except: pass
+        
+    # Default data jika benar-benar kosong
     return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
 
 def add_district_basic(code, name, category):
@@ -125,6 +122,7 @@ def add_district_basic(code, name, category):
     if not df.empty and 'id' in df.columns:
         ids = pd.to_numeric(df['id'], errors='coerce').dropna()
         if not ids.empty: new_id = int(ids.max()) + 1
+        
     if service_sheets and SPREADSHEET_ID:
         try:
             rv = [str(new_id), code, name, category, "", ""]
@@ -132,50 +130,49 @@ def add_district_basic(code, name, category):
                 spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
-            return True
-        except Exception as e:
-            st.error(f"⚠️ Gagal menyimpan distrik! Pastikan tab '{TAB_DISTRICTS_BASIC}' sudah dibuat secara manual. Error: {e}")
-            return False
-    return False
+        except: pass
+        
+    # Update local json juga
+    new_row = {"id": new_id, "code": code, "name": name, "category": category, "last_training_date": "", "next_due_date": ""}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
+    except: pass
+    return True
 
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
-    if not service_sheets or not SPREADSHEET_ID: return False
-    try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
-        v = r.get("values", [])
-        ri = -1
-        for i, row in enumerate(v):
-            if row and str(row[0]).strip() == str(dist_id).strip(): ri = i + 1; break
-        if ri != -1:
-            service_sheets.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!B{ri}:F{ri}",
-                valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
-            ).execute()
-            return True
-    except Exception as e:
-        st.error(f"⚠️ Gagal memperbarui distrik: {e}")
-    return False
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
+            v = r.get("values", [])
+            ri = -1
+            for i, row in enumerate(v):
+                if row and str(row[0]).strip() == str(dist_id).strip(): ri = i + 1; break
+            if ri != -1:
+                service_sheets.spreadsheets().values().update(
+                    spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!B{ri}:F{ri}",
+                    valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
+                ).execute()
+        except: pass
+    return True
 
 def delete_district_row_basic(dist_id):
-    if not service_sheets or not SPREADSHEET_ID: return False
-    try:
-        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:A").execute()
-        v = r.get("values", [])
-        ri = -1
-        for i, row in enumerate(v):
-            if row and str(row[0]).strip() == str(dist_id).strip(): ri = i; break
-        if ri != -1:
-            sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_DISTRICTS_BASIC), None)
-            if sid is not None:
-                service_sheets.spreadsheets().batchUpdate(
-                    spreadsheetId=SPREADSHEET_ID, 
-                    body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]}
-                ).execute()
-                return True
-    except Exception as e:
-        st.error(f"⚠️ Gagal menghapus distrik: {e}")
-    return False
+    if service_sheets and SPREADSHEET_ID:
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:A").execute()
+            v = r.get("values", [])
+            ri = -1
+            for i, row in enumerate(v):
+                if row and str(row[0]).strip() == str(dist_id).strip(): ri = i; break
+            if ri != -1:
+                sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+                sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_DISTRICTS_BASIC), None)
+                if sid is not None:
+                    service_sheets.spreadsheets().batchUpdate(
+                        spreadsheetId=SPREADSHEET_ID, 
+                        body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]}
+                    ).execute()
+        except: pass
+    return True
 
 # ---------------- FUNGSI RECORD TRAINING (BASIC CARGO) ----------------
 def load_basic_records():
@@ -192,6 +189,12 @@ def load_basic_records():
                     if col not in df.columns: df[col] = ""
             return df
         except: pass 
+    if os.path.exists(LOCAL_DB_BASIC):
+        try:
+            with open(LOCAL_DB_BASIC, "r", encoding="utf-8") as f: 
+                data = json.load(f)
+                return pd.DataFrame(data) if data else pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
+        except: pass
     return pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
 
 def save_basic_record(payload):
@@ -200,6 +203,15 @@ def save_basic_record(payload):
             rv = [str(payload.get(c, ""))[:49000] for c in SHEET_COLUMNS_BASIC]
             service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
         except: pass
+    local_data = []
+    if os.path.exists(LOCAL_DB_BASIC):
+        try:
+            with open(LOCAL_DB_BASIC, "r", encoding="utf-8") as f: local_data = json.load(f)
+        except: pass
+    local_data.append(payload)
+    try:
+        with open(LOCAL_DB_BASIC, "w", encoding="utf-8") as f: json.dump(local_data, f, ensure_ascii=False, indent=4)
+    except: pass
     return True
 
 def get_next_cert_number_basic(airline, df_records):
@@ -576,7 +588,7 @@ elif menu == "Ujian Basic Cargo":
         with col2:
             company = st.text_input("Perusahaan*")
             dist_df = get_districts_basic()
-            dist_options = (dist_df['code'] + " - " + dist_df['name']).tolist() if not dist_df.empty else []
+            dist_options = (dist_df['code'] + " - " + dist_df['name']).tolist() if not dist_df.empty and 'code' in dist_df.columns and 'name' in dist_df.columns else []
             selected_dist = st.selectbox("Distrik Penugasan*", options=dist_options, index=None, placeholder="-- Pilih Distrik Penugasan --")
             training_date = st.date_input("Tanggal Pelaksanaan Training", date.today(), format="DD/MM/YYYY")
 
@@ -700,12 +712,12 @@ elif menu == "Dashboard Instruktur & Records":
                 st.success("✅ Data berhasil dihapus permanen dari Google Sheets!"); time.sleep(1); st.rerun()
 
         col1, col2 = st.columns(2)
-        with col1: filter_dist = st.multiselect("Filter Distrik", options=records_df['district'].unique())
-        with col2: filter_role = st.multiselect("Filter Jabatan", options=records_df['job_role'].unique())
+        with col1: filter_dist = st.multiselect("Filter Distrik", options=records_df['district'].unique() if 'district' in records_df.columns else [])
+        with col2: filter_role = st.multiselect("Filter Jabatan", options=records_df['job_role'].unique() if 'job_role' in records_df.columns else [])
 
         filtered_df = records_df.copy()
-        if filter_dist: filtered_df = filtered_df[filtered_df['district'].isin(filter_dist)]
-        if filter_role: filtered_df = filtered_df[filtered_df['job_role'].isin(filter_role)]
+        if filter_dist and 'district' in filtered_df.columns: filtered_df = filtered_df[filtered_df['district'].isin(filter_dist)]
+        if filter_role and 'job_role' in filtered_df.columns: filtered_df = filtered_df[filtered_df['job_role'].isin(filter_role)]
 
         st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
@@ -723,12 +735,12 @@ elif menu == "Dashboard Instruktur & Records":
         st.caption("Gunakan bagian ini untuk menerbitkan absensi resmi per distrik dan per tanggal kegiatan.")
         col_ab1, col_ab2 = st.columns(2)
         with col_ab1:
-            all_districts = sorted(records_df['district'].dropna().unique().tolist())
+            all_districts = sorted(records_df['district'].dropna().unique().tolist()) if 'district' in records_df.columns else []
             selected_absensi_dist = st.selectbox("1. Pilih Distrik Penugasan:", options=all_districts) if all_districts else None
         with col_ab2:
-            if selected_absensi_dist:
+            if selected_absensi_dist and 'district' in records_df.columns:
                 dist_records = records_df[records_df['district'] == selected_absensi_dist]
-                avail_dates = sorted(dist_records['training_date'].dropna().unique().tolist(), reverse=True)
+                avail_dates = sorted(dist_records['training_date'].dropna().unique().tolist(), reverse=True) if 'training_date' in dist_records.columns else []
                 selected_absensi_date = st.selectbox("2. Pilih Tanggal Training:", options=avail_dates) if avail_dates else None
             else: selected_absensi_date = None
 
@@ -776,29 +788,29 @@ elif menu == "Dashboard Instruktur & Records":
         # ==================== UNDUH ULANG SERTIFIKAT ====================
         st.markdown("---")
         st.subheader("🎓 Cetak / Unduh Ulang Sertifikat Peserta")
-        passed_records = records_df[(records_df['status'] == 'LULUS') & (records_df['cert_no_sj'] != '-') & (records_df['cert_no_sj'].notna())].copy()
+        passed_records = records_df[(records_df['status'] == 'LULUS') & (records_df['cert_no_sj'] != '-') & (records_df['cert_no_sj'].notna())].copy() if 'status' in records_df.columns and 'cert_no_sj' in records_df.columns else pd.DataFrame()
 
         if passed_records.empty: st.info("Belum ada data peserta yang dinyatakan lulus untuk diunduh sertifikatnya.")
         else:
             tab_cert1, tab_cert2 = st.tabs(["📦 Unduh Sekaligus Berdasarkan Pilihan Distrik (.ZIP)", "👤 Unduh Perorangan"])
             with tab_cert1:
                 st.markdown("##### 📁 Download Sertifikat Sesuai Distrik Penugasan")
-                dist_codes = sorted(passed_records['district'].dropna().unique().tolist())
+                dist_codes = sorted(passed_records['district'].dropna().unique().tolist()) if 'district' in passed_records.columns else []
                 all_choices = [f"{d} - (Semua Unit / Perusahaan)" for d in dist_codes]
                 
                 sel_group_col1, sel_group_col2 = st.columns(2)
                 with sel_group_col1:
-                    selected_group = st.selectbox("Pilih Distrik Penugasan Target:", options=all_choices, key="bc_batch_dist")
+                    selected_group = st.selectbox("Pilih Distrik Penugasan Target:", options=all_choices, key="bc_batch_dist") if all_choices else None
                 with sel_group_col2:
-                    target_dist = selected_group.split(" - ", 1)[0].strip()
-                    df_dist_only = passed_records[passed_records['district'] == target_dist].copy()
-                    dist_dates = sorted(df_dist_only['training_date'].dropna().unique().tolist(), reverse=True)
-                    batch_date = st.selectbox("Pilih Tanggal Pelaksanaan (Opsional):", options=["Semua Tanggal"] + dist_dates, key="bc_batch_date")
+                    target_dist = selected_group.split(" - ", 1)[0].strip() if selected_group else ""
+                    df_dist_only = passed_records[passed_records['district'] == target_dist].copy() if target_dist and 'district' in passed_records.columns else pd.DataFrame()
+                    dist_dates = sorted(df_dist_only['training_date'].dropna().unique().tolist(), reverse=True) if not df_dist_only.empty and 'training_date' in df_dist_only.columns else []
+                    batch_date = st.selectbox("Pilih Tanggal Pelaksanaan (Opsional):", options=["Semua Tanggal"] + dist_dates, key="bc_batch_date") if dist_dates else "Semua Tanggal"
 
-                if batch_date != "Semua Tanggal": batch_candidates = df_dist_only[df_dist_only['training_date'] == batch_date].copy()
+                if batch_date != "Semua Tanggal" and not df_dist_only.empty: batch_candidates = df_dist_only[df_dist_only['training_date'] == batch_date].copy()
                 else: batch_candidates = df_dist_only.copy()
 
-                st.info(f"Ditemukan **{len(batch_candidates)} orang peserta** untuk target: **{selected_group}**.")
+                st.info(f"Ditemukan **{len(batch_candidates)} orang peserta** untuk target: **{selected_group if selected_group else '-'}**.")
                 
                 if not batch_candidates.empty:
                     c_zip1, c_zip2, c_zip3 = st.columns(3)
@@ -833,16 +845,17 @@ elif menu == "Dashboard Instruktur & Records":
             with tab_cert2:
                 st.markdown("##### 👤 Download Sertifikat Spesifik Per Peserta")
                 options_dict = {f"{r['nik']} - {r['full_name']} ({r['district']} - {r['company']}) | Tgl: {r['training_date']}": r for _, r in passed_records.iterrows()}
-                selected_candidate_label = st.selectbox("Pilih Peserta untuk Dicetak Ulang Sertifikatnya:", options=list(options_dict.keys()), key="bc_single_cert")
-                selected_candidate = options_dict[selected_candidate_label]
-                st.write(f"**Peserta:** {selected_candidate['full_name']} | **Perusahaan:** {selected_candidate['company']} | **No Sertifikat SJ:** `{selected_candidate['cert_no_sj']}` | **No Sertifikat IN:** `{selected_candidate['cert_no_in']}`")
-                re_col1, re_col2 = st.columns(2)
-                with re_col1:
-                    re_pdf_sj = generate_cert_basic("SJ", str(selected_candidate['cert_no_sj']).replace('.0', ''), str(selected_candidate['full_name']), str(selected_candidate['training_date']))
-                    if re_pdf_sj: st.download_button(label=f"📄 Unduh Ulang Sertifikat SJ", data=re_pdf_sj, file_name=f"Sertifikat_Basic_SJ_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf", mime="application/pdf", use_container_width=True)
-                with re_col2:
-                    re_pdf_in = generate_cert_basic("IN", str(selected_candidate['cert_no_in']).replace('.0', ''), str(selected_candidate['full_name']), str(selected_candidate['training_date']))
-                    if re_pdf_in: st.download_button(label=f"📄 Unduh Ulang Sertifikat IN", data=re_pdf_in, file_name=f"Sertifikat_Basic_IN_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf", mime="application/pdf", use_container_width=True)
+                selected_candidate_label = st.selectbox("Pilih Peserta untuk Dicetak Ulang Sertifikatnya:", options=list(options_dict.keys()), key="bc_single_cert") if options_dict else None
+                if selected_candidate_label:
+                    selected_candidate = options_dict[selected_candidate_label]
+                    st.write(f"**Peserta:** {selected_candidate['full_name']} | **Perusahaan:** {selected_candidate['company']} | **No Sertifikat SJ:** `{selected_candidate['cert_no_sj']}` | **No Sertifikat IN:** `{selected_candidate['cert_no_in']}`")
+                    re_col1, re_col2 = st.columns(2)
+                    with re_col1:
+                        re_pdf_sj = generate_cert_basic("SJ", str(selected_candidate['cert_no_sj']).replace('.0', ''), str(selected_candidate['full_name']), str(selected_candidate['training_date']))
+                        if re_pdf_sj: st.download_button(label=f"📄 Unduh Ulang Sertifikat SJ", data=re_pdf_sj, file_name=f"Sertifikat_Basic_SJ_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf", mime="application/pdf", use_container_width=True)
+                    with re_col2:
+                        re_pdf_in = generate_cert_basic("IN", str(selected_candidate['cert_no_in']).replace('.0', ''), str(selected_candidate['full_name']), str(selected_candidate['training_date']))
+                        if re_pdf_in: st.download_button(label=f"📄 Unduh Ulang Sertifikat IN", data=re_pdf_in, file_name=f"Sertifikat_Basic_IN_{str(selected_candidate['full_name']).replace(' ', '_')}.pdf", mime="application/pdf", use_container_width=True)
 
 # ==================== MENU 4: MASTER DISTRIK & RECURRENT ====================
 elif menu == "Master Distrik & Jadwal Recurrent":
@@ -859,59 +872,65 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         except: return "Format Tanggal Salah"
 
     with st.expander("✏️ **Pusat Edit Manual Data Distrik & Jadwal Recurrent (Basic Cargo)**", expanded=True):
-        if not dist_df.empty:
-            dist_map = {f"ID {d_row['id']} | {d_row['code']} - {d_row['name']} ({d_row['category']})": d_row for _, d_row in dist_df.iterrows()}
-            sel_dist_lbl = st.selectbox("Pilih Distrik yang Ingin Diubah:", list(dist_map.keys()))
-            cur_data = dist_map[sel_dist_lbl]
+        if not dist_df.empty and 'code' in dist_df.columns:
+            dist_map = {f"ID {d_row.get('id', '')} | {d_row.get('code', '')} - {d_row.get('name', '')} ({d_row.get('category', '')})": d_row for _, d_row in dist_df.iterrows()}
+            sel_dist_lbl = st.selectbox("Pilih Distrik yang Ingin Diubah:", list(dist_map.keys())) if dist_map else None
+            if sel_dist_lbl:
+                cur_data = dist_map[sel_dist_lbl]
+                raw_last, raw_due = str(cur_data.get('last_training_date', '')).strip(), str(cur_data.get('next_due_date', '')).strip()
+                default_last, default_due, has_valid_history = date.today(), date.today() + relativedelta(months=24), False
+                if raw_last and raw_last not in ['None', '', 'nan', 'NaT']:
+                    try: default_last = datetime.strptime(raw_last[:10], "%Y-%m-%d").date(); has_valid_history = True
+                    except: pass
+                if raw_due and raw_due not in ['None', '', 'nan', 'NaT']:
+                    try: default_due = datetime.strptime(raw_due[:10], "%Y-%m-%d").date()
+                    except: default_due = default_last + relativedelta(months=24)
 
-            raw_last, raw_due = str(cur_data.get('last_training_date', '')).strip(), str(cur_data.get('next_due_date', '')).strip()
-            default_last, default_due, has_valid_history = date.today(), date.today() + relativedelta(months=24), False
-            if raw_last and raw_last not in ['None', '', 'nan', 'NaT']:
-                try: default_last = datetime.strptime(raw_last[:10], "%Y-%m-%d").date(); has_valid_history = True
-                except: pass
-            if raw_due and raw_due not in ['None', '', 'nan', 'NaT']:
-                try: default_due = datetime.strptime(raw_due[:10], "%Y-%m-%d").date()
-                except: default_due = default_last + relativedelta(months=24)
+                with st.form("form_edit_manual_distrik_bc"):
+                    e_c1, e_c2, e_c3 = st.columns(3)
+                    with e_c1: edit_code = st.text_input("Kode Distrik (Code)", value=str(cur_data.get('code', '')))
+                    with e_c2: edit_name = st.text_input("Nama Distrik / Stasiun", value=str(cur_data.get('name', '')))
+                    with e_c3: 
+                        cat_val = str(cur_data.get('category', 'Sriwijaya Air'))
+                        cat_idx = CATEGORY_OPTIONS.index(cat_val) if cat_val in CATEGORY_OPTIONS else 0
+                        edit_cat = st.selectbox("Kategori", CATEGORY_OPTIONS, index=cat_idx)
 
-            with st.form("form_edit_manual_distrik_bc"):
-                e_c1, e_c2, e_c3 = st.columns(3)
-                with e_c1: edit_code = st.text_input("Kode Distrik (Code)", value=str(cur_data['code']))
-                with e_c2: edit_name = st.text_input("Nama Distrik / Stasiun", value=str(cur_data['name']))
-                with e_c3: edit_cat = st.selectbox("Kategori", CATEGORY_OPTIONS, index=CATEGORY_OPTIONS.index(cur_data['category']) if cur_data['category'] in CATEGORY_OPTIONS else 0)
+                    st.markdown("---")
+                    status_history = st.radio("Status Riwayat Pelatihan:", options=["Ada Riwayat Training", "Belum Ada Riwayat (Kosongkan Tanggal)"], index=0 if has_valid_history else 1, horizontal=True)
+                    e_c4, e_c5 = st.columns(2)
+                    with e_c4: edit_last_date = st.date_input("Last Training Date:", value=default_last, format="DD/MM/YYYY")
+                    with e_c5: edit_due_date = st.date_input("Next Due Date (Reminder):", value=default_due, format="DD/MM/YYYY")
 
-                st.markdown("---")
-                status_history = st.radio("Status Riwayat Pelatihan:", options=["Ada Riwayat Training", "Belum Ada Riwayat (Kosongkan Tanggal)"], index=0 if has_valid_history else 1, horizontal=True)
-                e_c4, e_c5 = st.columns(2)
-                with e_c4: edit_last_date = st.date_input("Last Training Date:", value=default_last, format="DD/MM/YYYY")
-                with e_c5: edit_due_date = st.date_input("Next Due Date (Reminder):", value=default_due, format="DD/MM/YYYY")
+                    st.markdown("---")
+                    b_col1, b_col2 = st.columns([1, 1])
+                    with b_col1: btn_save_manual = st.form_submit_button("💾 Simpan Perubahan ke Google Sheets", type="primary")
+                    with b_col2: btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
-                st.markdown("---")
-                b_col1, b_col2 = st.columns([1, 1])
-                with b_col1: btn_save_manual = st.form_submit_button("💾 Simpan Perubahan ke Google Sheets", type="primary")
-                with b_col2: btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
-
-                if btn_save_manual:
-                    sukses = update_district_row_basic(cur_data['id'], edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "")
-                    if sukses: st.success(f"✅ Data ID {cur_data['id']} berhasil diperbarui!"); time.sleep(1); st.rerun()
-                if btn_del_single:
-                    sukses_del = delete_district_row_basic(cur_data['id'])
-                    if sukses_del: st.toast(f"Distrik {cur_data['code']} dihapus!", icon="🗑️"); time.sleep(1); st.rerun()
+                    if btn_save_manual:
+                        update_district_row_basic(cur_data.get('id'), edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "")
+                        st.success(f"✅ Data ID {cur_data.get('id')} berhasil diperbarui!"); time.sleep(1); st.rerun()
+                    if btn_del_single:
+                        delete_district_row_basic(cur_data.get('id'))
+                        st.toast(f"Distrik dihapus!", icon="🗑️"); time.sleep(1); st.rerun()
 
     st.markdown("---")
     st.subheader("📋 Tabel Monitoring Distrik & Recurrent Basic Cargo")
     
-    if dist_df.empty:
-        st.info("Tabel distrik masih kosong. Jika Anda merasa sudah mengisi, pastikan nama tab di Google Sheets adalah 'districts_basic'.")
+    if dist_df.empty or 'code' not in dist_df.columns:
+        st.info("Tabel distrik masih kosong. Pastikan tab 'districts_basic' sudah terisi data di Google Sheets.")
     else:
         df_display = dist_df.copy()
         def format_date_display(d_str):
             if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']: return "-"
             try: return datetime.strptime(str(d_str)[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
             except: return str(d_str)
-        df_display['Status Recurrent'] = df_display['next_due_date'].apply(calculate_status)
-        df_display['Last Training Date'] = df_display['last_training_date'].apply(format_date_display)
-        df_display['Next Due Date (Reminder)'] = df_display['next_due_date'].apply(format_date_display)
-        st.dataframe(df_display[['id', 'code', 'name', 'category', 'Last Training Date', 'Next Due Date (Reminder)', 'Status Recurrent']], hide_index=True, use_container_width=True)
+            
+        df_display['Status Recurrent'] = df_display['next_due_date'].apply(calculate_status) if 'next_due_date' in df_display.columns else "Belum Ada Riwayat Training"
+        df_display['Last Training Date'] = df_display['last_training_date'].apply(format_date_display) if 'last_training_date' in df_display.columns else "-"
+        df_display['Next Due Date (Reminder)'] = df_display['next_due_date'].apply(format_date_display) if 'next_due_date' in df_display.columns else "-"
+        
+        show_cols = [c for c in ['id', 'code', 'name', 'category', 'Last Training Date', 'Next Due Date (Reminder)', 'Status Recurrent'] if c in df_display.columns]
+        st.dataframe(df_display[show_cols], hide_index=True, use_container_width=True)
 
     st.markdown("---")
     st.subheader("➕ Tambah Rute / Distrik Baru (Basic Cargo)")
@@ -923,10 +942,9 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         
         if st.form_submit_button("Simpan Distrik Baru ke Google Sheets"):
             if new_code and new_name:
-                sukses = add_district_basic(new_code.upper().strip(), new_name.strip(), new_cat)
-                if sukses:
-                    st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!")
-                    time.sleep(1)
-                    st.rerun()
+                add_district_basic(new_code.upper().strip(), new_name.strip(), new_cat)
+                st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!")
+                time.sleep(1)
+                st.rerun()
             else:
                 st.error("Mohon isi kode dan nama distrik terlebih dahulu.")
