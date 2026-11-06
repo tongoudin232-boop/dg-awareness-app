@@ -6,6 +6,7 @@ import io
 import os
 import zipfile
 import json
+import time
 import textwrap
 
 # Impor library PDF (Eksklusif untuk cetak sertifikat Basic Cargo di sini)
@@ -24,7 +25,7 @@ except ImportError:
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
-# Impor HANYA fungsi absensi dari file pendukung Anda (Fungsi distrik kita buat mandiri di bawah)
+# Impor HANYA fungsi absensi dari file pendukung Anda 
 try:
     from attendance_generator import generate_attendance_pdf, generate_attendance_excel
 except ImportError:
@@ -90,12 +91,10 @@ def init_google_sheets():
                 sm = s_sht.spreadsheets().get(spreadsheetId=sid).execute()
                 sheet_titles = [s['properties']['title'] for s in sm.get('sheets', [])]
                 
-                # Buat Tab Training Records jika belum ada
                 if TAB_NAME_BASIC not in sheet_titles:
                     s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_NAME_BASIC}}}]}).execute()
                     s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_NAME_BASIC}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS_BASIC]}).execute()
                 
-                # Buat Tab Master Distrik KHUSUS Basic Cargo jika belum ada
                 if TAB_DISTRICTS_BASIC not in sheet_titles:
                     s_sht.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [{"addSheet": {"properties": {"title": TAB_DISTRICTS_BASIC}}}]}).execute()
                     s_sht.spreadsheets().values().update(spreadsheetId=sid, range=f"{TAB_DISTRICTS_BASIC}!A1", valueInputOption="USER_ENTERED", body={"values": [SHEET_COLUMNS_DISTRICTS]}).execute()
@@ -105,21 +104,19 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK MANDIRI (BASIC CARGO) ----------------
+# ---------------- FUNGSI DISTRIK MANDIRI (DENGAN DETEKTOR ERROR) ----------------
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
         try:
             r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
             v = r.get("values", [])
-            if v and len(v) > 1:
-                df = pd.DataFrame(v[1:], columns=v[0])
-                try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records")
-                except: pass
+            if v:
+                df = pd.DataFrame(v[1:], columns=v[0]) if len(v) > 1 else pd.DataFrame(columns=v[0])
                 return df
-        except: pass 
-    if os.path.exists(LOCAL_DISTRICTS_BASIC):
-        try: return pd.read_json(LOCAL_DISTRICTS_BASIC, orient="records")
-        except: pass
+            return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
+        except Exception as e:
+            st.error(f"⚠️ Gagal memuat data dari Google Sheets. Pastikan tab '{TAB_DISTRICTS_BASIC}' sudah Anda buat secara manual! Detail Error: {e}")
+            return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
     return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
 
 def add_district_basic(code, name, category):
@@ -135,10 +132,14 @@ def add_district_basic(code, name, category):
                 spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
-        except: pass
+            return True
+        except Exception as e:
+            st.error(f"⚠️ Gagal menyimpan distrik! Pastikan tab '{TAB_DISTRICTS_BASIC}' sudah dibuat secara manual. Error: {e}")
+            return False
+    return False
 
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
-    if not service_sheets or not SPREADSHEET_ID: return
+    if not service_sheets or not SPREADSHEET_ID: return False
     try:
         r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
         v = r.get("values", [])
@@ -150,10 +151,13 @@ def update_district_row_basic(dist_id, code, name, category, last_date, next_dat
                 spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!B{ri}:F{ri}",
                 valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
             ).execute()
-    except: pass
+            return True
+    except Exception as e:
+        st.error(f"⚠️ Gagal memperbarui distrik: {e}")
+    return False
 
 def delete_district_row_basic(dist_id):
-    if not service_sheets or not SPREADSHEET_ID: return
+    if not service_sheets or not SPREADSHEET_ID: return False
     try:
         r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:A").execute()
         v = r.get("values", [])
@@ -168,7 +172,10 @@ def delete_district_row_basic(dist_id):
                     spreadsheetId=SPREADSHEET_ID, 
                     body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]}
                 ).execute()
-    except: pass
+                return True
+    except Exception as e:
+        st.error(f"⚠️ Gagal menghapus distrik: {e}")
+    return False
 
 # ---------------- FUNGSI RECORD TRAINING (BASIC CARGO) ----------------
 def load_basic_records():
@@ -185,12 +192,6 @@ def load_basic_records():
                     if col not in df.columns: df[col] = ""
             return df
         except: pass 
-    if os.path.exists(LOCAL_DB_BASIC):
-        try:
-            with open(LOCAL_DB_BASIC, "r", encoding="utf-8") as f: 
-                data = json.load(f)
-                return pd.DataFrame(data) if data else pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
-        except: pass
     return pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
 
 def save_basic_record(payload):
@@ -199,16 +200,6 @@ def save_basic_record(payload):
             rv = [str(payload.get(c, ""))[:49000] for c in SHEET_COLUMNS_BASIC]
             service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
         except: pass
-    # Save Local Fallback
-    local_data = []
-    if os.path.exists(LOCAL_DB_BASIC):
-        try:
-            with open(LOCAL_DB_BASIC, "r", encoding="utf-8") as f: local_data = json.load(f)
-        except: pass
-    local_data.append(payload)
-    try:
-        with open(LOCAL_DB_BASIC, "w", encoding="utf-8") as f: json.dump(local_data, f, ensure_ascii=False, indent=4)
-    except: pass
     return True
 
 def get_next_cert_number_basic(airline, df_records):
@@ -226,7 +217,6 @@ def get_next_cert_number_basic(airline, df_records):
                         t_date = datetime.strptime(tgl_str[:10], "%Y-%m-%d").date()
                         if t_date >= limit_date: valid_count += 1
                 except: pass
-    # Format Khusus Basic Cargo
     return f"{(valid_count + 1):04d}/BC/{airline}-CGO/{romawi}/{today.year}"
 
 # ==================== GENERATOR SERTIFIKAT KHUSUS BASIC CARGO ====================
@@ -254,11 +244,9 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         if os.path.exists("Alice-Bold.ttf"): pdfmetrics.registerFont(TTFont('Alice', 'Alice-Bold.ttf')); font_utama = "Alice"
     except: pass
 
-    # Tanggal Valid (2 Tahun) & Tanggal Terbit
     try: 
         tgl_obj = datetime.strptime(str(training_date_str)[:10], "%Y-%m-%d").date()
         valid_dt = (tgl_obj + relativedelta(months=24)).strftime("%d/%m/%Y")
-        
         day = tgl_obj.day
         if 11 <= day <= 13: suffix = "th"
         else: suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
@@ -268,7 +256,6 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         valid_dt = str(training_date_str)
         tgl_terbit_fmt = f"Tangerang, {str(training_date_str)}"
 
-    # Posisi Teks Sertifikat Basic Cargo
     can.setFont(font_utama, 14) 
     can.drawCentredString(a4_w * 0.5, a4_h * 0.85, f"No: {cert_no}")
     can.setFont(font_utama, 24)
@@ -278,7 +265,6 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
     can.drawCentredString(a4_w * 0.15, a4_h * 0.15, f"VALID UNTIL: {valid_dt}")
     can.drawCentredString(a4_w * 0.85, a4_h * 0.30, f"{tgl_terbit_fmt}")
     
-    # Cetak QR Code (MASKING RGB TRANSPARAN) -> Parameter URL = basic_cert
     verify_url = f"https://sjnam-cargo.streamlit.app/Basic_Air_Cargo?basic_cert={cert_no}"
     try:
         import qrcode
@@ -905,14 +891,18 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                 with b_col2: btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                 if btn_save_manual:
-                    update_district_row_basic(cur_data['id'], edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "")
-                    st.success(f"✅ Data ID {cur_data['id']} berhasil diperbarui di tab districts_basic!"); st.rerun()
+                    sukses = update_district_row_basic(cur_data['id'], edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "")
+                    if sukses: st.success(f"✅ Data ID {cur_data['id']} berhasil diperbarui!"); time.sleep(1); st.rerun()
                 if btn_del_single:
-                    delete_district_row_basic(cur_data['id']); st.toast(f"Distrik {cur_data['code']} berhasil dihapus permanen!", icon="🗑️"); st.rerun()
+                    sukses_del = delete_district_row_basic(cur_data['id'])
+                    if sukses_del: st.toast(f"Distrik {cur_data['code']} dihapus!", icon="🗑️"); time.sleep(1); st.rerun()
 
     st.markdown("---")
     st.subheader("📋 Tabel Monitoring Distrik & Recurrent Basic Cargo")
-    if not dist_df.empty:
+    
+    if dist_df.empty:
+        st.info("Tabel distrik masih kosong. Jika Anda merasa sudah mengisi, pastikan nama tab di Google Sheets adalah 'districts_basic'.")
+    else:
         df_display = dist_df.copy()
         def format_date_display(d_str):
             if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']: return "-"
@@ -922,7 +912,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         df_display['Last Training Date'] = df_display['last_training_date'].apply(format_date_display)
         df_display['Next Due Date (Reminder)'] = df_display['next_due_date'].apply(format_date_display)
         st.dataframe(df_display[['id', 'code', 'name', 'category', 'Last Training Date', 'Next Due Date (Reminder)', 'Status Recurrent']], hide_index=True, use_container_width=True)
-    else: st.info("Data distrik sedang dimuat dari Google Sheets (Pastikan ada data di tab 'districts_basic')...")
 
     st.markdown("---")
     st.subheader("➕ Tambah Rute / Distrik Baru (Basic Cargo)")
@@ -931,7 +920,13 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         with c1: new_code = st.text_input("Kode Distrik / IATA (misal: BDJ)")
         with c2: new_name = st.text_input("Nama Kota / Bandara (misal: Banjarmasin)")
         with c3: new_cat = st.selectbox("Kategori", CATEGORY_OPTIONS)
+        
         if st.form_submit_button("Simpan Distrik Baru ke Google Sheets"):
             if new_code and new_name:
-                add_district_basic(new_code.upper().strip(), new_name.strip(), new_cat); st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!"); st.rerun()
-            else: st.error("Mohon isi kode dan nama distrik.")
+                sukses = add_district_basic(new_code.upper().strip(), new_name.strip(), new_cat)
+                if sukses:
+                    st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!")
+                    time.sleep(1)
+                    st.rerun()
+            else:
+                st.error("Mohon isi kode dan nama distrik terlebih dahulu.")
