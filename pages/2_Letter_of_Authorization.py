@@ -431,15 +431,11 @@ if "loa" in query_params:
 def save_new_peserta(d):
     if service_sheets and SPREADSHEET_ID:
         try:
-            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sheets = sheet_metadata.get('sheets', '')
-            sheet_names = [s['properties']['title'] for s in sheets]
-            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
-            
             rv = [str(d.get(c, ""))[:49000] for c in SHEET_COLUMNS]
+            # SUDAH DIKUNCI MATI HANYA BOLEH MENYIMPAN KE TAB_NAME ("DataPesertaLoA")
             service_sheets.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID,
-                range=f"{target_sheet}!A1",
+                range=f"{TAB_NAME}!A1",
                 valueInputOption="USER_ENTERED",
                 insertDataOption="INSERT_ROWS",
                 body={"values": [rv]}
@@ -847,15 +843,12 @@ elif sub_menu == "2. Verifikasi Data Peserta (Admin)":
                 if no_induk not in existing_ids:
                     if service_sheets and SPREADSHEET_ID:
                         try:
-                            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-                            sheets = sheet_metadata.get('sheets', '')
-                            sheet_names = [s['properties']['title'] for s in sheets]
-                            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
                             
                             rv = [str(p.get(c, ""))[:49000] for c in SHEET_COLUMNS]
+                            # Pastikan target sheet dikunci ke TAB_NAME
                             service_sheets.spreadsheets().values().append(
                                 spreadsheetId=SPREADSHEET_ID,
-                                range=f"{target_sheet}!A1",
+                                range=f"{TAB_NAME}!A1",
                                 valueInputOption="USER_ENTERED",
                                 insertDataOption="INSERT_ROWS",
                                 body={"values": [rv]}
