@@ -319,16 +319,10 @@ def load_data_peserta():
         
     if service_sheets and SPREADSHEET_ID:
         try:
-            sheet_metadata = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sheets = sheet_metadata.get('sheets', '')
-            sheet_names = [s['properties']['title'] for s in sheets]
-            target_sheet = TAB_NAME if TAB_NAME in sheet_names else (sheet_names[0] if sheet_names else "Sheet1")
-            
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{target_sheet}!A1:V").execute()
+            # SUDAH DIKUNCI MATI HANYA BOLEH BACA DARI TAB_NAME ("DataPesertaLoA")
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME}!A1:V").execute()
             v = r.get("values", [])
             
-            # PERBAIKAN: Jika terhubung sukses ke Sheets, pakai data dari Sheets (walau kosong).
-            # JANGAN bangkitkan data lokal jika Sheets sengaja dikosongkan.
             df = pd.DataFrame(columns=SHEET_COLUMNS)
             if v and len(v) > 1:
                 h = v[0]
@@ -338,7 +332,6 @@ def load_data_peserta():
                     if col not in df.columns: df[col] = ""
             return df
         except Exception:
-            # Jika BENAR-BENAR error (bukan kosong), baru pakai lokal
             pass 
             
     if not st.session_state.local_peserta_loa:
