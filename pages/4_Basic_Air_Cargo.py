@@ -66,7 +66,7 @@ TAB_NAME_BASIC = "Training_Records_Basic"
 LOCAL_DB_BASIC = "basic_records.json"
 SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_role", "company", "district", "district_name", "district_full", "score", "status", "cert_no_sj", "cert_no_in", "expiry_date", "jawaban_ujian"]
 
-TAB_DISTRICTS_BASIC = "districts_basic"
+TAB_DISTRICTS_BASIC = "districts_ basic"
 LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
