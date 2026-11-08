@@ -89,17 +89,8 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# FUNGSI PINTAR: DETEKSI NAMA TAB DISTRIK OTOMATIS & AMAN SPASI
+# KUNCI MATI NAMA TAB TANPA SPASI
 def get_actual_district_tab_name():
-    if service_sheets and SPREADSHEET_ID:
-        try:
-            meta = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sheets = meta.get('sheets', [])
-            for s in sheets:
-                title = s.get('properties', {}).get('title', '')
-                if 'district' in title.lower() and 'basic' in title.lower():
-                    return title
-        except: pass
     return "districts_basic"
 
 # ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
