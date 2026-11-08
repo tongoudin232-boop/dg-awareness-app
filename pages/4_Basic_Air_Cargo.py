@@ -89,7 +89,7 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# FUNGSI PINTAR: DETEKSI NAMA TAB DISTRIK OTOMATIS DARI GOOGLE SHEETS
+# FUNGSI PINTAR: DETEKSI NAMA TAB DISTRIK OTOMATIS & AMAN SPASI
 def get_actual_district_tab_name():
     if service_sheets and SPREADSHEET_ID:
         try:
@@ -102,14 +102,12 @@ def get_actual_district_tab_name():
         except: pass
     return "districts_basic"
 
-TAB_DISTRICTS_BASIC = get_actual_district_tab_name()
-
 # ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
 def get_districts_basic():
     tab_target = get_actual_district_tab_name()
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1:F").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{tab_target}'!A1:F").execute()
             v = r.get("values", [])
             if v and len(v) > 1:
                 df = pd.DataFrame(v[1:], columns=v[0])
@@ -141,7 +139,7 @@ def add_district_basic(code, name, category):
         try:
             rv = [str(new_id), code, name, category, "", ""]
             service_sheets.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1",
+                spreadsheetId=SPREADSHEET_ID, range=f"'{tab_target}'!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
         except: pass
@@ -156,14 +154,14 @@ def update_district_row_basic(dist_id, code, name, category, last_date, next_dat
     tab_target = get_actual_district_tab_name()
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1:F").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{tab_target}'!A1:F").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
                 if row and str(row[0]).strip() == str(dist_id).strip(): ri = i + 1; break
             if ri != -1:
                 service_sheets.spreadsheets().values().update(
-                    spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!B{ri}:F{ri}",
+                    spreadsheetId=SPREADSHEET_ID, range=f"'{tab_target}'!B{ri}:F{ri}",
                     valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
                 ).execute()
         except: pass
@@ -173,7 +171,7 @@ def delete_district_row_basic(dist_id):
     tab_target = get_actual_district_tab_name()
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{tab_target}!A1:A").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{tab_target}'!A1:A").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
@@ -193,7 +191,7 @@ def delete_district_row_basic(dist_id):
 def load_basic_records():
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1:Z").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1:Z").execute()
             v = r.get("values", [])
             df = pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
             if v and len(v) > 1:
@@ -216,7 +214,7 @@ def save_basic_record(payload):
     if service_sheets and SPREADSHEET_ID:
         try:
             rv = [str(payload.get(c, ""))[:49000] for c in SHEET_COLUMNS_BASIC]
-            service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
+            service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
         except: pass
     local_data = []
     if os.path.exists(LOCAL_DB_BASIC):
@@ -716,13 +714,13 @@ elif menu == "Dashboard Instruktur & Records":
                 del_id = rec_options[selected_to_delete]
                 if service_sheets and SPREADSHEET_ID:
                     try:
-                        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1:A").execute()
+                        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1:A").execute()
                         v = r.get("values", [])
                         ri = next((i for i, row in enumerate(v) if row and row[0] == del_id), -1)
                         if ri != -1:
                             sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
                             sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME_BASIC), None)
-                            service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]}).execute()
+                            service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]} ).execute()
                     except: pass
                 st.success("✅ Data berhasil dihapus permanen dari Google Sheets!"); time.sleep(1); st.rerun()
 
