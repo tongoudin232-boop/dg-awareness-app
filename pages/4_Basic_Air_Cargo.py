@@ -17,6 +17,7 @@ try:
     from reportlab.lib.utils import ImageReader
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib import colors
 except ImportError:
     st.error("⚠️ Library 'PyPDF2' dan 'reportlab' belum terinstall.")
     st.stop()
@@ -70,7 +71,7 @@ LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
 SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
-TAB_DISTRICTS_BASIC = "districts_basic"  # TAB KHUSUS TERISOLASI BASIC CARGO
+TAB_DISTRICTS_BASIC = "districts_basic"
 
 def get_credentials():
     try:
@@ -90,7 +91,7 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO DENGAN DEFAULT FALLBACK ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
 DEFAULT_DISTRICTS_DATA = [
     {"id": 1, "code": "BEJ", "name": "Berau", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
     {"id": 2, "code": "BPN", "name": "Balikpapan", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
@@ -124,7 +125,6 @@ def get_districts_basic():
             if not df.empty: return df
         except: pass
         
-    # Default fallback agar dropdown langsung terisi normal
     return pd.DataFrame(DEFAULT_DISTRICTS_DATA)
 
 def add_district_basic(code, name, category):
@@ -241,7 +241,7 @@ def get_next_cert_number_basic(airline, df_records):
                 except: pass
     return f"{(valid_count + 1):04d}/BC/{airline}-CGO/{romawi}/{today.year}"
 
-# ==================== GENERATOR SERTIFIKAT KHUSUS BASIC CARGO ====================
+# ==================== GENERATOR SERTIFIKAT KHUSUS BASIC CARGO (FONT ARIAL BLACK) ====================
 def generate_cert_basic(airline, cert_no, name, training_date_str):
     template_name = "Template_Basic_SJ.pdf" if airline == "SJ" else "Template_Basic_IN.pdf"
     if not os.path.exists(template_name): return None
@@ -259,34 +259,44 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
 
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=(a4_w, a4_h))
-    can.setFillColorRGB(0, 0, 0)
     
-    font_utama = "Times-Bold"
+    # Daftarkan font Arial Black jika file-nya tersedia, fallback ke Helvetica-Bold
+    font_nama = "Helvetica-Bold"
     try:
-        if os.path.exists("Alice-Bold.ttf"): pdfmetrics.registerFont(TTFont('Alice', 'Alice-Bold.ttf')); font_utama = "Alice"
+        if os.path.exists("Arial-Black.ttf"):
+            pdfmetrics.registerFont(TTFont('Arial-Black', 'Arial-Black.ttf'))
+            font_nama = 'Arial-Black'
+        elif os.path.exists("Arial_Black.ttf"):
+            pdfmetrics.registerFont(TTFont('Arial-Black', 'Arial_Black.ttf'))
+            font_nama = 'Arial-Black'
     except: pass
 
     try: 
         tgl_obj = datetime.strptime(str(training_date_str)[:10], "%Y-%m-%d").date()
-        valid_dt = (tgl_obj + relativedelta(months=24)).strftime("%d/%m/%Y")
         day = tgl_obj.day
         if 11 <= day <= 13: suffix = "th"
         else: suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
         bulan_en = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][tgl_obj.month - 1]
         tgl_terbit_fmt = f"Tangerang, {bulan_en} {day}{suffix} {tgl_obj.year}"
     except: 
-        valid_dt = str(training_date_str)
         tgl_terbit_fmt = f"Tangerang, {str(training_date_str)}"
 
-    can.setFont(font_utama, 14) 
-    can.drawCentredString(a4_w * 0.5, a4_h * 0.85, f"No: {cert_no}")
-    can.setFont(font_utama, 24)
-    can.drawCentredString(a4_w * 0.5, a4_h * 0.55, f"{str(name).upper()}")
-    
+    # 1. Nomor Sertifikat di antara CERTIFICATE OF APPRECIATION & PROUDLY AWARDED TO
+    can.setFillColor(colors.HexColor("#000000"))
     can.setFont("Helvetica-Bold", 12)
-    can.drawCentredString(a4_w * 0.15, a4_h * 0.15, f"VALID UNTIL: {valid_dt}")
-    can.drawCentredString(a4_w * 0.85, a4_h * 0.30, f"{tgl_terbit_fmt}")
+    can.drawCentredString(a4_w * 0.5, a4_h * 0.65, f"No: {cert_no}")
+
+    # 2. Nama Peserta di antara PROUDLY AWARDED TO & HAS SUCCESFULLY COMPLETED THE (Font Arial Black, Gold #C5A059)
+    can.setFillColor(colors.HexColor("#C5A059"))
+    can.setFont(font_nama, 28)
+    can.drawCentredString(a4_w * 0.5, a4_h * 0.48, f"{str(name).upper()}")
     
+    # 3. Kota & Tanggal Penerbitan Center di bawah BASIC AIR CARGO
+    can.setFillColor(colors.HexColor("#000000"))
+    can.setFont("Helvetica", 11)
+    can.drawCentredString(a4_w * 0.5, a4_h * 0.28, f"{tgl_terbit_fmt}")
+    
+    # 4. QR Code Center tepat di atas tulisan RENJI HAGEN
     verify_url = f"https://sjnam-cargo.streamlit.app/Basic_Air_Cargo?basic_cert={cert_no}"
     try:
         import qrcode
@@ -299,7 +309,7 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         
         qr_size = a4_w * 0.11 
         qr_x = (a4_w * 0.85) - (qr_size / 2) 
-        qr_y = a4_h * 0.12 
+        qr_y = a4_h * 0.13 
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size, mask=[250, 255, 250, 255, 250, 255])
     except: pass
         
@@ -315,9 +325,9 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         return final_pdf.getvalue()
     except: return None
 
-# ==================== DAFTAR SOAL BASIC CARGO ====================
+# ==================== DAFTAR SOAL BASIC CARGO (SOAL NO 1 TANPA "UDARA") ====================
 SOAL_UJIAN_BASIC_CARGO = [
-    {"no": 1, "q": "Apa yang dimaksud dengan Kargo (Cargo) udara?", "options": ["a) Penumpang yang membawa barang banyak", "b) Semua barang kiriman via udara, laut/darat yang dilengkapi dokumen pengangkutan", "c) Bagasi bawaan penumpang di kabin", "d) Barang ilegal yang disita bandara"], "a": "b) Semua barang kiriman via udara, laut/darat yang dilengkapi dokumen pengangkutan"},
+    {"no": 1, "q": "Apa yang dimaksud dengan Kargo (Cargo)?", "options": ["a) Penumpang yang membawa barang banyak", "b) Semua barang kiriman via udara, laut/darat yang dilengkapi dokumen pengangkutan", "c) Bagasi bawaan penumpang di kabin", "d) Barang ilegal yang disita bandara"], "a": "b) Semua barang kiriman via udara, laut/darat yang dilengkapi dokumen pengangkutan"},
     {"no": 2, "q": "Secara umum, kargo dibagi menjadi dua kategori utama, yaitu:", "options": ["a) Normal Cargo & Abnormal Cargo", "b) Domestic Cargo & International Cargo", "c) General Cargo & Special Cargo", "d) Safe Cargo & Dangerous Cargo"], "a": "c) General Cargo & Special Cargo"},
     {"no": 3, "q": "Barang-barang umum yang tidak membutuhkan penanganan secara khusus (special handling) disebut?", "options": ["a) Special Cargo", "b) Dangerous Goods", "c) General Cargo", "d) Valuable Cargo"], "a": "c) General Cargo"},
     {"no": 4, "q": "Kiriman yang membutuhkan penanganan khusus dari sisi penerimaan, penyimpanan, maupun pengangkutan disebut?", "options": ["a) Special Cargo", "b) General Cargo", "c) Regular Cargo", "d) Normal Goods"], "a": "a) Special Cargo"},
@@ -917,7 +927,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     with b_col2: btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                     if btn_save_manual:
-                        update_district_row_basic(cur_data.get('id'), edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riovenants Training" else "")
+                        update_district_row_basic(cur_data.get('id'), edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "")
                         st.success(f"✅ Data ID {cur_data.get('id')} berhasil diperbarui!"); time.sleep(1); st.rerun()
                     if btn_del_single:
                         delete_district_row_basic(cur_data.get('id'))
