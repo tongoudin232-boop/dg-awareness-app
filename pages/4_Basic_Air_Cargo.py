@@ -70,7 +70,7 @@ LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
 SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
-TAB_DISTRICTS_BASIC = "districts_basic"  # TAB KHUSUS TERISOLASI UNTUK BASIC CARGO
+TAB_DISTRICTS_BASIC = "districts_basic"  # MURNI TERISOLASI KHUSUS BASIC CARGO
 
 def get_credentials():
     try:
@@ -94,7 +94,6 @@ service_sheets, SPREADSHEET_ID = init_google_sheets()
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
         try:
-            # Menggunakan format pemanggilan aman tanpa spasi tersembunyi
             r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
             v = r.get("values", [])
             if v and len(v) > 1:
@@ -915,7 +914,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     st.subheader("📋 Tabel Monitoring Distrik & Recurrent Basic Cargo")
     
     if dist_df.empty or 'code' not in dist_df.columns:
-        st.info("Tabel distrik masih kosong. Pastikan tab 'districts' sudah terisi data di Google Sheets.")
+        st.info("Tabel distrik masih kosong. Pastikan tab 'districts_basic' sudah terisi data di Google Sheets.")
     else:
         df_display = dist_df.copy()
         def format_date_display(d_str):
