@@ -69,7 +69,7 @@ SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 TAB_DISTRICTS_BASIC = "districts_basic"
 
-# 🔴 INI DIA BIANG KEROKNYA: ID SPREADSHEET SUDAH DIPERBAIKI 100% SESUAI URL ANDA 🔴
+# ID SPREADSHEET 100% AKURAT SESUAI URL
 SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs"
 
 def get_credentials():
@@ -79,6 +79,12 @@ def get_credentials():
         creds_info["private_key"] = str(creds_info["private_key"]).replace("\\n", "\n").replace("\n", "\n").strip()
         return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     except: return None
+
+def get_service_email():
+    try:
+        creds_info = dict(st.secrets["gcp_service_account"]) if "gcp_service_account" in st.secrets else dict(st.secrets)
+        return creds_info.get("client_email", "Email tidak terdeteksi")
+    except: return "Gagal membaca Secrets"
 
 def init_google_sheets():
     creds = get_credentials()
@@ -90,7 +96,7 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO (MURNI GOOGLE SHEETS) ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
 DEFAULT_DISTRICTS_DATA = [
     {"id": 1, "code": "BEJ", "name": "Berau", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
     {"id": 2, "code": "BPN", "name": "Balikpapan", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
@@ -115,7 +121,7 @@ def get_districts_basic():
                     if col not in df.columns: df[col] = ""
                 if not df.empty: return df
         except Exception as e: 
-            st.error(f"Gagal memuat distrik dari Google Sheets: {e}")
+            st.error(f"Gagal memuat distrik: {e}")
             pass
     return pd.DataFrame(DEFAULT_DISTRICTS_DATA)
 
@@ -133,8 +139,7 @@ def add_district_basic(code, name, category):
                 spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
-        except Exception as e:
-            st.error(f"Gagal menambah distrik ke Google Sheets: {e}")
+        except Exception as e: st.error(f"Gagal menambah distrik: {e}")
     return True
 
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
@@ -150,8 +155,7 @@ def update_district_row_basic(dist_id, code, name, category, last_date, next_dat
                     spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!B{ri}:F{ri}",
                     valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
                 ).execute()
-        except Exception as e:
-             st.error(f"Gagal mengupdate distrik di Google Sheets: {e}")
+        except Exception as e: st.error(f"Gagal mengubah distrik: {e}")
     return True
 
 def delete_district_row_basic(dist_id):
@@ -170,11 +174,10 @@ def delete_district_row_basic(dist_id):
                         spreadsheetId=SPREADSHEET_ID, 
                         body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]}
                     ).execute()
-        except Exception as e:
-             st.error(f"Gagal menghapus distrik di Google Sheets: {e}")
+        except Exception as e: st.error(f"Gagal menghapus distrik: {e}")
     return True
 
-# ---------------- FUNGSI RECORD TRAINING (MURNI GOOGLE SHEETS) ----------------
+# ---------------- FUNGSI RECORD TRAINING ----------------
 def load_basic_records():
     if service_sheets and SPREADSHEET_ID:
         try:
@@ -652,7 +655,6 @@ elif menu == "Ujian Basic Cargo":
                         'jawaban_ujian': ans_json
                     }
                     
-                    # Coba simpan ke Google Sheets
                     is_saved = save_basic_record(record_payload)
                     
                     if is_saved:
@@ -671,7 +673,7 @@ elif menu == "Ujian Basic Cargo":
                         }
                         st.rerun()
                     else:
-                        st.error("Gagal melanjutkan proses ujian. Silakan hubungi instruktur.")
+                        st.error("Gagal melanjutkan proses ujian. Silakan cek koneksi API atau hubungi instruktur.")
 
 # ==================== MENU 3: DASHBOARD INSTRUKTUR & RECORDS ====================
 elif menu == "Dashboard Instruktur & Records":
@@ -681,8 +683,9 @@ elif menu == "Dashboard Instruktur & Records":
     with st.expander("⚙️ **Pengaturan Khusus & Refresh Data Cache**", expanded=False):
         c_tool1, c_tool2 = st.columns(2)
         with c_tool1:
-            st.markdown("**1. Sinkronisasi & Refresh Cache Database**")
-            st.caption("Membersihkan cache internal agar data Google Sheets termutakhir langsung terbaca.")
+            st.markdown("**1. Sinkronisasi & Pengecekan Kredensial**")
+            st.info(f"📧 **Email Service Account Aktif di Aplikasi:** `{get_service_email()}`")
+            st.caption("Pastikan email di atas SAMA PERSIS dengan yang Anda undang sebagai Editor di Google Sheets.")
             if st.button("🔄 Refresh Data Cache", type="primary"):
                 st.cache_data.clear(); st.cache_resource.clear(); st.success("✅ Cache berhasil dibersihkan!"); time.sleep(1); st.rerun()
         with c_tool2:
@@ -695,8 +698,8 @@ elif menu == "Dashboard Instruktur & Records":
                         sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME_BASIC), None)
                         if sid is not None:
                             service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": 1}}}]}).execute()
-                    except: pass
-                st.toast("Seluruh record Basic Cargo berhasil dibersihkan dari cloud!", icon="🗑️"); st.rerun()
+                    except Exception as e: st.error(f"Gagal menghapus: {e}")
+                st.toast("Proses penghapusan selesai!", icon="🗑️"); st.rerun()
 
     st.markdown("---")
     records_df = load_basic_records()
@@ -717,7 +720,7 @@ elif menu == "Dashboard Instruktur & Records":
                             sm = service_sheets.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
                             sid = next((s["properties"]["sheetId"] for s in sm.get("sheets", []) if s["properties"]["title"] == TAB_NAME_BASIC), None)
                             service_sheets.spreadsheets().batchUpdate(spreadsheetId=SPREADSHEET_ID, body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]} ).execute()
-                    except: pass
+                    except Exception as e: st.error(f"Gagal hapus record spesifik: {e}")
                 st.success("✅ Data berhasil dihapus permanen dari Google Sheets!"); time.sleep(1); st.rerun()
 
         col1, col2 = st.columns(2)
