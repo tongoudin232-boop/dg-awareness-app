@@ -916,7 +916,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                         delete_district_row_basic(cur_data.get('id'))
                         st.toast(f"Distrik dihapus!", icon="🗑️"); time.sleep(1); st.rerun()
 
-    st.native = "---"
+    st.markdown("---")
     st.subheader("📋 Tabel Monitoring Distrik & Recurrent Basic Cargo")
     
     if dist_df.empty or 'code' not in dist_df.columns:
@@ -924,7 +924,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     else:
         df_display = dist_df.copy()
         def format_date_display(d_str):
-            if pd.isna(d_str) or not d_str or str(d_str).strip()ని ['None', '', 'nan', 'NaT']: return "-"
+            if pd.isna(d_str) or not d_str or str(d_str).strip() in ['None', '', 'nan', 'NaT']: return "-"
             try: return datetime.strptime(str(d_str)[:10], "%Y-%m-%d").strftime("%d-%b-%Y")
             except: return str(d_str)
             
@@ -932,7 +932,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         df_display['Last Training Date'] = df_display['last_training_date'].apply(format_date_display) if 'last_training_date' in df_display.columns else "-"
         df_display['Next Due Date (Reminder)'] = df_display['next_due_date'].apply(format_date_display) if 'next_due_date' in df_display.columns else "-"
         
-        show_cols = [c for c in ['id', 'code', 'name', 'category', 'Last Training Date', 'Next Due Date (Reminder)', 'Status Recurrent'] in df_display.columns]
+        show_cols = [c for c in ['id', 'code', 'name', 'category', 'Last Training Date', 'Next Due Date (Reminder)', 'Status Recurrent'] if c in df_display.columns]
         st.dataframe(df_display[show_cols], hide_index=True, use_container_width=True)
 
     st.markdown("---")
@@ -946,7 +946,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
         if st.form_submit_button("Simpan Distrik Baru ke Google Sheets"):
             if new_code and new_name:
                 add_district_basic(new_code.upper().strip(), new_name.strip(), new_cat)
-                st.success(f"Distrik {new_code.upper()} berhasil diperbarui!")
+                st.success(f"Distrik {new_code.upper()} berhasil ditambahkan!")
                 time.sleep(1); st.rerun()
             else:
                 st.error("Mohon isi kode dan nama distrik terlebih dahulu.")
