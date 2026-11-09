@@ -241,7 +241,7 @@ def get_next_cert_number_basic(airline, df_records):
                 except: pass
     return f"{(valid_count + 1):04d}/BC/{airline}-CGO/{romawi}/{today.year}"
 
-# ==================== GENERATOR SERTIFIKAT KHUSUS BASIC CARGO (FONT ARIAL BLACK) ====================
+# ==================== GENERATOR SERTIFIKAT KHUSUS BASIC CARGO ====================
 def generate_cert_basic(airline, cert_no, name, training_date_str):
     template_name = "Template_Basic_SJ.pdf" if airline == "SJ" else "Template_Basic_IN.pdf"
     if not os.path.exists(template_name): return None
@@ -260,7 +260,6 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=(a4_w, a4_h))
     
-    # Daftarkan font Arial Black jika file-nya tersedia, fallback ke Helvetica-Bold
     font_nama = "Helvetica-Bold"
     try:
         if os.path.exists("Arial-Black.ttf"):
@@ -296,7 +295,7 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
     can.setFont("Helvetica", 11)
     can.drawCentredString(a4_w * 0.5, a4_h * 0.28, f"{tgl_terbit_fmt}")
     
-    # 4. QR Code Center tepat di atas tulisan RENJI HAGEN
+    # 4. QR Code diposisikan di atas Renji Hagen (digeser ke kiri agar pas di tengah)
     verify_url = f"https://sjnam-cargo.streamlit.app/Basic_Air_Cargo?basic_cert={cert_no}"
     try:
         import qrcode
@@ -307,8 +306,8 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         qr.make_image(fill_color="black", back_color="white").convert('RGB').save(qr_bytes, format="PNG")
         qr_bytes.seek(0)
         
-        qr_size = a4_w * 0.11 
-        qr_x = (a4_w * 0.85) - (qr_size / 2) 
+        qr_size = a4_w * 0.10 
+        qr_x = (a4_w * 0.77) - (qr_size / 2) 
         qr_y = a4_h * 0.13 
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size, mask=[250, 255, 250, 255, 250, 255])
     except: pass
