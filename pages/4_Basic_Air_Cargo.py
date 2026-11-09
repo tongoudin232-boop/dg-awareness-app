@@ -70,7 +70,7 @@ LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
 SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
-TAB_DISTRICTS_BASIC = "districts_basic"  # KUNCI MATI TAB BASIC CARGO
+TAB_DISTRICTS_BASIC = "districts_basic"  # TAB KHUSUS TERISOLASI BASIC CARGO
 
 def get_credentials():
     try:
@@ -90,22 +90,33 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO (DENGAN TANDA KUTIP AMAN) ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO DENGAN DEFAULT FALLBACK ----------------
+DEFAULT_DISTRICTS_DATA = [
+    {"id": 1, "code": "BEJ", "name": "Berau", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 2, "code": "BPN", "name": "Balikpapan", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 3, "code": "BTH", "name": "Batam (GH & Internal)", "category": "NAM Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 4, "code": "CGK", "name": "Cengkareng", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 5, "code": "DJJ", "name": "Jayapura", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 6, "code": "DPS", "name": "Denpasar", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 7, "code": "KNO", "name": "Medan", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 8, "code": "KOE", "name": "Kupang", "category": "NAM Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 9, "code": "UPG", "name": "Makassar", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
+    {"id": 10, "code": "SUB", "name": "Surabaya", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""}
+]
+
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
-        for candidate in [TAB_DISTRICTS_BASIC, "districts_ basic", "districts"]:
-            try:
-                # Dibungkus tanda kutip satu ('') agar aman dari error spasi
-                r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{candidate}'!A1:F").execute()
-                v = r.get("values", [])
-                if v and len(v) > 1:
-                    df = pd.DataFrame(v[1:], columns=v[0])
-                    for col in SHEET_COLUMNS_DISTRICTS:
-                        if col not in df.columns: df[col] = ""
-                    try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
-                    except: pass
-                    return df
-            except: continue
+        try:
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1:F").execute()
+            v = r.get("values", [])
+            if v and len(v) > 1:
+                df = pd.DataFrame(v[1:], columns=v[0])
+                for col in SHEET_COLUMNS_DISTRICTS:
+                    if col not in df.columns: df[col] = ""
+                try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
+                except: pass
+                if not df.empty: return df
+        except: pass
             
     if os.path.exists(LOCAL_DISTRICTS_BASIC):
         try:
@@ -113,7 +124,8 @@ def get_districts_basic():
             if not df.empty: return df
         except: pass
         
-    return pd.DataFrame(columns=SHEET_COLUMNS_DISTRICTS)
+    # Default fallback agar dropdown langsung terisi normal
+    return pd.DataFrame(DEFAULT_DISTRICTS_DATA)
 
 def add_district_basic(code, name, category):
     df = get_districts_basic()
@@ -905,7 +917,7 @@ elif menu == "Master Distrik & Jadwal Recurrent":
                     with b_col2: btn_del_single = st.form_submit_button("🗑️ Hapus Distrik Ini Permanen", type="secondary")
 
                     if btn_save_manual:
-                        update_district_row_basic(cur_data.get('id'), edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "")
+                        update_district_row_basic(cur_data.get('id'), edit_code, edit_name, edit_cat, edit_last_date.strftime("%Y-%m-%d") if status_history == "Ada Riwayat Training" else "", edit_due_date.strftime("%Y-%m-%d") if status_history == "Ada Riovenants Training" else "")
                         st.success(f"✅ Data ID {cur_data.get('id')} berhasil diperbarui!"); time.sleep(1); st.rerun()
                     if btn_del_single:
                         delete_district_row_basic(cur_data.get('id'))
