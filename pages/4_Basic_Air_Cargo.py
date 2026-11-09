@@ -295,7 +295,7 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
     can.setFont("Helvetica", 11)
     can.drawCentredString(a4_w * 0.5, a4_h * 0.28, f"{tgl_terbit_fmt}")
     
-    # 4. QR Code diposisikan di atas Renji Hagen (digeser ke kiri agar pas di tengah)
+    # 4. QR Code di atas Renji Hagen (disesuaikan ke X=0.74 agar pas tepat di tengah nama)
     verify_url = f"https://sjnam-cargo.streamlit.app/Basic_Air_Cargo?basic_cert={cert_no}"
     try:
         import qrcode
@@ -307,7 +307,7 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         qr_bytes.seek(0)
         
         qr_size = a4_w * 0.10 
-        qr_x = (a4_w * 0.77) - (qr_size / 2) 
+        qr_x = (a4_w * 0.74) - (qr_size / 2) 
         qr_y = a4_h * 0.13 
         can.drawImage(ImageReader(qr_bytes), qr_x, qr_y, width=qr_size, height=qr_size, mask=[250, 255, 250, 255, 250, 255])
     except: pass
