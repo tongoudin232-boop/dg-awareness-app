@@ -70,7 +70,7 @@ LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 
 SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
-TAB_DISTRICTS_BASIC = "districts_basic"  # MURNI TERISOLASI KHUSUS BASIC CARGO
+TAB_DISTRICTS_BASIC = "districts_basic"  # KUNCI MATI TAB BASIC CARGO
 
 def get_credentials():
     try:
@@ -90,21 +90,22 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO (DENGAN TANDA KUTIP AMAN) ----------------
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
-        try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
-            v = r.get("values", [])
-            if v and len(v) > 1:
-                df = pd.DataFrame(v[1:], columns=v[0])
-                for col in SHEET_COLUMNS_DISTRICTS:
-                    if col not in df.columns: df[col] = ""
-                try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
-                except: pass
-                return df
-        except Exception as e:
-            st.warning(f"⚠️ Gagal sinkron Google Sheets: {e}")
+        for candidate in [TAB_DISTRICTS_BASIC, "districts_ basic", "districts"]:
+            try:
+                # Dibungkus tanda kutip satu ('') agar aman dari error spasi
+                r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{candidate}'!A1:F").execute()
+                v = r.get("values", [])
+                if v and len(v) > 1:
+                    df = pd.DataFrame(v[1:], columns=v[0])
+                    for col in SHEET_COLUMNS_DISTRICTS:
+                        if col not in df.columns: df[col] = ""
+                    try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
+                    except: pass
+                    return df
+            except: continue
             
     if os.path.exists(LOCAL_DISTRICTS_BASIC):
         try:
@@ -125,7 +126,7 @@ def add_district_basic(code, name, category):
         try:
             rv = [str(new_id), code, name, category, "", ""]
             service_sheets.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1",
+                spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
         except: pass
@@ -139,14 +140,14 @@ def add_district_basic(code, name, category):
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1:F").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
                 if row and str(row[0]).strip() == str(dist_id).strip(): ri = i + 1; break
             if ri != -1:
                 service_sheets.spreadsheets().values().update(
-                    spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!B{ri}:F{ri}",
+                    spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!B{ri}:F{ri}",
                     valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
                 ).execute()
         except: pass
@@ -155,7 +156,7 @@ def update_district_row_basic(dist_id, code, name, category, last_date, next_dat
 def delete_district_row_basic(dist_id):
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:A").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1:A").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
@@ -175,7 +176,7 @@ def delete_district_row_basic(dist_id):
 def load_basic_records():
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1:Z").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1:Z").execute()
             v = r.get("values", [])
             df = pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
             if v and len(v) > 1:
@@ -198,7 +199,7 @@ def save_basic_record(payload):
     if service_sheets and SPREADSHEET_ID:
         try:
             rv = [str(payload.get(c, ""))[:49000] for c in SHEET_COLUMNS_BASIC]
-            service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
+            service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
         except: pass
     local_data = []
     if os.path.exists(LOCAL_DB_BASIC):
