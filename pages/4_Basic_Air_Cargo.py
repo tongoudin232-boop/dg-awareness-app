@@ -66,11 +66,11 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 TAB_NAME_BASIC = "Training_Records_Basic"
 SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_role", "company", "district", "district_name", "district_full", "score", "status", "cert_no_sj", "cert_no_in", "expiry_date", "jawaban_ujian"]
 
-LOCAL_DISTRICTS_BASIC = "districts_basic.json"
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
-
-SPREADSHEET_ID_FIXED = "1wr7CAll_gMDTjyK6yeScysAkOLcgogFyXYFXt7cFrs"
 TAB_DISTRICTS_BASIC = "districts_basic"
+
+# 🔴 INI DIA BIANG KEROKNYA: ID SPREADSHEET SUDAH DIPERBAIKI 100% SESUAI URL ANDA 🔴
+SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs"
 
 def get_credentials():
     try:
@@ -90,7 +90,7 @@ def init_google_sheets():
 
 service_sheets, SPREADSHEET_ID = init_google_sheets()
 
-# ---------------- FUNGSI DISTRIK BASIC CARGO ----------------
+# ---------------- FUNGSI DISTRIK BASIC CARGO (MURNI GOOGLE SHEETS) ----------------
 DEFAULT_DISTRICTS_DATA = [
     {"id": 1, "code": "BEJ", "name": "Berau", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
     {"id": 2, "code": "BPN", "name": "Balikpapan", "category": "Sriwijaya Air", "last_training_date": "", "next_due_date": ""},
@@ -113,17 +113,10 @@ def get_districts_basic():
                 df = pd.DataFrame(v[1:], columns=v[0])
                 for col in SHEET_COLUMNS_DISTRICTS:
                     if col not in df.columns: df[col] = ""
-                try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
-                except: pass
                 if not df.empty: return df
-        except: pass
-            
-    if os.path.exists(LOCAL_DISTRICTS_BASIC):
-        try:
-            df = pd.read_json(LOCAL_DISTRICTS_BASIC, orient="records")
-            if not df.empty: return df
-        except: pass
-        
+        except Exception as e: 
+            st.error(f"Gagal memuat distrik dari Google Sheets: {e}")
+            pass
     return pd.DataFrame(DEFAULT_DISTRICTS_DATA)
 
 def add_district_basic(code, name, category):
@@ -140,12 +133,8 @@ def add_district_basic(code, name, category):
                 spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
-        except: pass
-        
-    new_row = {"id": new_id, "code": code, "name": name, "category": category, "last_training_date": "", "next_due_date": ""}
-    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    try: df.to_json(LOCAL_DISTRICTS_BASIC, orient="records", force_ascii=False)
-    except: pass
+        except Exception as e:
+            st.error(f"Gagal menambah distrik ke Google Sheets: {e}")
     return True
 
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
@@ -161,7 +150,8 @@ def update_district_row_basic(dist_id, code, name, category, last_date, next_dat
                     spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!B{ri}:F{ri}",
                     valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
                 ).execute()
-        except: pass
+        except Exception as e:
+             st.error(f"Gagal mengupdate distrik di Google Sheets: {e}")
     return True
 
 def delete_district_row_basic(dist_id):
@@ -180,10 +170,11 @@ def delete_district_row_basic(dist_id):
                         spreadsheetId=SPREADSHEET_ID, 
                         body={"requests": [{"deleteDimension": {"range": {"sheetId": sid, "dimension": "ROWS", "startIndex": ri, "endIndex": ri + 1}}}]}
                     ).execute()
-        except: pass
+        except Exception as e:
+             st.error(f"Gagal menghapus distrik di Google Sheets: {e}")
     return True
 
-# ---------------- FUNGSI RECORD TRAINING (MURNI GOOGLE SHEETS CLOUD) ----------------
+# ---------------- FUNGSI RECORD TRAINING (MURNI GOOGLE SHEETS) ----------------
 def load_basic_records():
     if service_sheets and SPREADSHEET_ID:
         try:
@@ -197,16 +188,27 @@ def load_basic_records():
                 for col in SHEET_COLUMNS_BASIC:
                     if col not in df.columns: df[col] = ""
             return df
-        except: pass 
+        except Exception as e:
+            st.error(f"⚠️ Gagal membaca data dari Google Sheets: {e}")
+            pass 
     return pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
 
 def save_basic_record(payload):
     if service_sheets and SPREADSHEET_ID:
         try:
             rv = [str(payload.get(c, ""))[:49000] for c in SHEET_COLUMNS_BASIC]
-            service_sheets.spreadsheets().values().append(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1", valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}).execute()
-        except: pass
-    return True
+            service_sheets.spreadsheets().values().append(
+                spreadsheetId=SPREADSHEET_ID, 
+                range=f"'{TAB_NAME_BASIC}'!A1", 
+                valueInputOption="USER_ENTERED", 
+                insertDataOption="INSERT_ROWS", 
+                body={"values": [rv]}
+            ).execute()
+            return True
+        except Exception as e:
+            st.error(f"❌ Gagal menyimpan ke Google Sheets: {e}")
+            return False
+    return False
 
 def get_next_cert_number_basic(airline, df_records):
     today = date.today()
@@ -308,7 +310,7 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
         return final_pdf.getvalue()
     except: return None
 
-# ==================== DAFTAR SOAL BASIC CARGO (SOAL NO 1 TANPA "UDARA") ====================
+# ==================== DAFTAR SOAL BASIC CARGO ====================
 SOAL_UJIAN_BASIC_CARGO = [
     {"no": 1, "q": "Apa yang dimaksud dengan Kargo (Cargo)?", "options": ["a) Penumpang yang membawa barang banyak", "b) Semua barang kiriman via udara, laut/darat yang dilengkapi dokumen pengangkutan", "c) Bagasi bawaan penumpang di kabin", "d) Barang ilegal yang disita bandara"], "a": "b) Semua barang kiriman via udara, laut/darat yang dilengkapi dokumen pengangkutan"},
     {"no": 2, "q": "Secara umum, kargo dibagi menjadi dua kategori utama, yaitu:", "options": ["a) Normal Cargo & Abnormal Cargo", "b) Domestic Cargo & International Cargo", "c) General Cargo & Special Cargo", "d) Safe Cargo & Dangerous Cargo"], "a": "c) General Cargo & Special Cargo"},
@@ -650,22 +652,26 @@ elif menu == "Ujian Basic Cargo":
                         'jawaban_ujian': ans_json
                     }
                     
-                    save_basic_record(record_payload)
+                    # Coba simpan ke Google Sheets
+                    is_saved = save_basic_record(record_payload)
                     
-                    pdf_sj_out, pdf_in_out = None, None
-                    if passed:
-                        pdf_sj_out = generate_cert_basic("SJ", cert_no_sj, full_name.strip(), str(training_date))
-                        pdf_in_out = generate_cert_basic("IN", cert_no_in, full_name.strip(), str(training_date))
+                    if is_saved:
+                        pdf_sj_out, pdf_in_out = None, None
+                        if passed:
+                            pdf_sj_out = generate_cert_basic("SJ", cert_no_sj, full_name.strip(), str(training_date))
+                            pdf_in_out = generate_cert_basic("IN", cert_no_in, full_name.strip(), str(training_date))
 
-                    st.session_state['exam_result_bc'] = {
-                        'passed': passed,
-                        'score': score,
-                        'correct_count': correct_count,
-                        'full_name': full_name.strip(),
-                        'pdf_sj': pdf_sj_out,
-                        'pdf_in': pdf_in_out
-                    }
-                st.rerun()
+                        st.session_state['exam_result_bc'] = {
+                            'passed': passed,
+                            'score': score,
+                            'correct_count': correct_count,
+                            'full_name': full_name.strip(),
+                            'pdf_sj': pdf_sj_out,
+                            'pdf_in': pdf_in_out
+                        }
+                        st.rerun()
+                    else:
+                        st.error("Gagal melanjutkan proses ujian. Silakan hubungi instruktur.")
 
 # ==================== MENU 3: DASHBOARD INSTRUKTUR & RECORDS ====================
 elif menu == "Dashboard Instruktur & Records":
