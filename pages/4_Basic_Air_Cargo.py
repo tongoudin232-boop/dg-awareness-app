@@ -69,8 +69,8 @@ SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 TAB_DISTRICTS_BASIC = "districts_basic"
 
-# 🟢 SAYA PERTARUHKAN NYAWA SAYA, INI ID YANG 1000% BENAR TANPA TYPO 🟢
-SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs"
+# 🟢 ID SPREADSHEET (Dibersihkan dari spasi gaib) 🟢
+SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs".strip()
 
 def get_credentials():
     try:
@@ -113,7 +113,8 @@ DEFAULT_DISTRICTS_DATA = [
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1:F").execute()
+            # RANGE TANPA TANDA KUTIP
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
             v = r.get("values", [])
             if v and len(v) > 1:
                 df = pd.DataFrame(v[1:], columns=v[0])
@@ -136,7 +137,7 @@ def add_district_basic(code, name, category):
         try:
             rv = [str(new_id), code, name, category, "", ""]
             service_sheets.spreadsheets().values().append(
-                spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1",
+                spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1",
                 valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS", body={"values": [rv]}
             ).execute()
         except Exception as e: st.error(f"Gagal menambah distrik: {e}")
@@ -145,14 +146,14 @@ def add_district_basic(code, name, category):
 def update_district_row_basic(dist_id, code, name, category, last_date, next_date):
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1:F").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
                 if row and str(row[0]).strip() == str(dist_id).strip(): ri = i + 1; break
             if ri != -1:
                 service_sheets.spreadsheets().values().update(
-                    spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!B{ri}:F{ri}",
+                    spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!B{ri}:F{ri}",
                     valueInputOption="USER_ENTERED", body={"values": [[code, name, category, last_date, next_date]]}
                 ).execute()
         except Exception as e: st.error(f"Gagal mengubah distrik: {e}")
@@ -161,7 +162,7 @@ def update_district_row_basic(dist_id, code, name, category, last_date, next_dat
 def delete_district_row_basic(dist_id):
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_DISTRICTS_BASIC}'!A1:A").execute()
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:A").execute()
             v = r.get("values", [])
             ri = -1
             for i, row in enumerate(v):
@@ -181,7 +182,8 @@ def delete_district_row_basic(dist_id):
 def load_basic_records():
     if service_sheets and SPREADSHEET_ID:
         try:
-            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1:Z").execute()
+            # RANGE TANPA TANDA KUTIP
+            r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1:Z").execute()
             v = r.get("values", [])
             df = pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
             if v and len(v) > 1:
@@ -202,7 +204,7 @@ def save_basic_record(payload):
             rv = [str(payload.get(c, ""))[:49000] for c in SHEET_COLUMNS_BASIC]
             service_sheets.spreadsheets().values().append(
                 spreadsheetId=SPREADSHEET_ID, 
-                range=f"'{TAB_NAME_BASIC}'!A1", 
+                range=f"{TAB_NAME_BASIC}!A1", 
                 valueInputOption="USER_ENTERED", 
                 insertDataOption="INSERT_ROWS", 
                 body={"values": [rv]}
@@ -713,7 +715,7 @@ elif menu == "Dashboard Instruktur & Records":
                 del_id = rec_options[selected_to_delete]
                 if service_sheets and SPREADSHEET_ID:
                     try:
-                        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"'{TAB_NAME_BASIC}'!A1:A").execute()
+                        r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1:A").execute()
                         v = r.get("values", [])
                         ri = next((i for i, row in enumerate(v) if row and row[0] == del_id), -1)
                         if ri != -1:
