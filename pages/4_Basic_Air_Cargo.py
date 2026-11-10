@@ -69,8 +69,8 @@ SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 TAB_DISTRICTS_BASIC = "districts_basic"
 
-# ID SPREADSHEET 100% AKURAT SESUAI URL
-SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs"
+# 🟢 ID SPREADSHEET SUDAH DIPERBAIKI (gogFyXYXFtx) 🟢
+SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgogFyXYXFtx7cFrs"
 
 def get_credentials():
     try:
