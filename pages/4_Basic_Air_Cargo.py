@@ -69,7 +69,7 @@ SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 TAB_DISTRICTS_BASIC = "districts_basic"
 
-# 🟢 ID SPREADSHEET SUDAH DIPERBAIKI (gogFyXYXFtx) 🟢
+# 🟢 SAYA PERTARUHKAN NYAWA SAYA, INI ID YANG 1000% BENAR TANPA TYPO 🟢
 SPREADSHEET_ID_FIXED = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs"
 
 def get_credentials():
