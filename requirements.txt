@@ -3,6 +3,7 @@ pandas
 openpyxl
 reportlab
 pypdf==3.17.4
+PyPDF2
 qrcode
 pillow
 python-dateutil
