@@ -877,7 +877,8 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df = get_districts_basic()
 
     def calculate_status(due_str):
-        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '', 'nan', 'NaT']: return "Belum Ada Riwayat Training"
+        # Tambahkan tanda '-' di dalam list ini:
+        if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '', 'nan', 'NaT', '-']: return "Belum Ada Riwayat Training"
         try:
             diff_days = (datetime.strptime(str(due_str)[:10], "%Y-%m-%d").date() - date.today()).days
             if diff_days < 0: return "⚠️ Kedaluwarsa (Wajib Recurrent)"
