@@ -1,7 +1,16 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
+# ID Spreadsheet DG_Awareness_Database
+SPREADSHEET_ID = "1wr7cAII_gMDTjyK6yeScysAkOLcgoGfyXYXFtX7cFrs".strip()
+
+TAB_RECORDS = "training_records"
+TAB_DISTRICTS = "districts"
 
 # Urutan 13 kolom baku persis sesuai header A1:M1 di Google Sheets training_records
 SHEET_COLUMNS = [
@@ -10,10 +19,40 @@ SHEET_COLUMNS = [
     "cert_no_sj", "cert_no_in", "expiry_date", "id"
 ]
 
+DISTRICT_COLUMNS = [
+    "id", "code", "name", "category", "last_training_date", "next_due_date"
+]
 
-def get_connection():
-    """Mengambil koneksi Google Sheets API via Streamlit GSheetsConnection"""
-    return st.connection("gsheets", type=GSheetsConnection)
+
+def get_credentials():
+    """Mengambil kredensial Service Account dari st.secrets"""
+    try:
+        creds_info = None
+        if "gcp_service_account" in st.secrets:
+            creds_info = dict(st.secrets["gcp_service_account"])
+        elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            creds_info = dict(st.secrets["connections"]["gsheets"])
+        elif "private_key" in st.secrets:
+            creds_info = dict(st.secrets)
+
+        if not creds_info or "private_key" not in creds_info:
+            return None
+
+        creds_info["private_key"] = str(creds_info["private_key"]).replace("\\n", "\n").strip()
+        return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    except Exception:
+        return None
+
+
+def get_sheets_service():
+    """Inisialisasi koneksi Google Sheets API v4"""
+    creds = get_credentials()
+    if not creds:
+        return None
+    try:
+        return build("sheets", "v4", credentials=creds, cache_discovery=False)
+    except Exception:
+        return None
 
 
 def init_db():
@@ -22,90 +61,182 @@ def init_db():
 
 
 def get_districts():
-    """Mengambil daftar seluruh distrik dari Google Sheets"""
-    conn = get_connection()
+    """Mengambil daftar seluruh distrik dari tab 'districts' Google Sheets"""
+    service = get_sheets_service()
+    if not service:
+        st.error("⚠️ Kredensial Google Sheets tidak ditemukan di Secrets.")
+        return pd.DataFrame()
+
     try:
-        df = conn.read(worksheet="districts", ttl=2)
-        if df is not None and not df.empty:
-            df = df.dropna(how='all')
-            if 'id' in df.columns:
-                df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
-                df = df[df['id'] > 0]
-                return df.sort_values(by=['code', 'name']).reset_index(drop=True)
-    except Exception:
-        pass
+        res = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_DISTRICTS}!A1:F"
+        ).execute()
+        values = res.get("values", [])
+        if values and len(values) > 1:
+            headers = [str(h).strip() for h in values[0]]
+            rows = [r + [""] * (len(headers) - len(r)) for r in values[1:]]
+            df = pd.DataFrame(rows, columns=headers)
+            for col in DISTRICT_COLUMNS:
+                if col not in df.columns:
+                    df[col] = ""
+            df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
+            df = df[df['id'] > 0]
+            return df.sort_values(by=['code', 'name']).reset_index(drop=True)
+    except Exception as e:
+        st.error(f"⚠️ Gagal membaca tabel districts: {e}")
+
     return pd.DataFrame()
 
 
 def add_district(code, name, category):
-    """Menambahkan distrik baru ke tabel Google Sheets"""
-    conn = get_connection()
+    """Menambahkan distrik baru ke tab 'districts' Google Sheets"""
+    service = get_sheets_service()
+    if not service:
+        return
+
     df = get_districts()
     next_id = 1 if df.empty else int(df['id'].max()) + 1
-    new_row = pd.DataFrame([{
-        "id": next_id,
-        "code": code.upper().strip(),
-        "name": name.strip(),
-        "category": category.strip(),
-        "last_training_date": "",
-        "next_due_date": ""
-    }])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
-    conn.update(worksheet="districts", data=updated_df.fillna(''))
-    st.cache_data.clear()
+    row_values = [
+        str(next_id),
+        code.upper().strip(),
+        name.strip(),
+        category.strip(),
+        "",
+        ""
+    ]
+    try:
+        service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_DISTRICTS}!A1:F1",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row_values]}
+        ).execute()
+        st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Gagal menambah distrik: {e}")
 
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
     """Memperbarui informasi data distrik tertentu"""
-    conn = get_connection()
-    df = get_districts()
-    if not df.empty and 'id' in df.columns:
-        idx = df[df['id'] == int(dist_id)].index
-        if not idx.empty:
-            df.loc[idx, 'code'] = code.upper().strip()
-            df.loc[idx, 'name'] = name.strip()
-            df.loc[idx, 'category'] = category.strip()
-            df.loc[idx, 'last_training_date'] = str(last_date).strip()
-            df.loc[idx, 'next_due_date'] = str(due_date).strip()
-            conn.update(worksheet="districts", data=df.fillna(''))
+    service = get_sheets_service()
+    if not service:
+        return
+
+    try:
+        res = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_DISTRICTS}!A1:F"
+        ).execute()
+        values = res.get("values", [])
+        target_row = -1
+        for i, row in enumerate(values):
+            if i == 0:
+                continue
+            if row and str(row[0]).strip() == str(dist_id).strip():
+                target_row = i + 1
+                break
+
+        if target_row != -1:
+            service.spreadsheets().values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f"{TAB_DISTRICTS}!B{target_row}:F{target_row}",
+                valueInputOption="USER_ENTERED",
+                body={"values": [[
+                    code.upper().strip(),
+                    name.strip(),
+                    category.strip(),
+                    str(last_date).strip(),
+                    str(due_date).strip()
+                ]]}
+            ).execute()
             st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Gagal mengubah distrik: {e}")
 
 
 def delete_district_row(dist_id):
     """Menghapus distrik berdasarkan ID"""
-    conn = get_connection()
-    df = get_districts()
-    if not df.empty and 'id' in df.columns:
-        df = df[df['id'] != int(dist_id)]
-        conn.update(worksheet="districts", data=df.fillna(''))
-        st.cache_data.clear()
+    service = get_sheets_service()
+    if not service:
+        return
+
+    try:
+        res = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_DISTRICTS}!A1:A"
+        ).execute()
+        values = res.get("values", [])
+        row_idx = -1
+        for i, row in enumerate(values):
+            if i == 0:
+                continue
+            if row and str(row[0]).strip() == str(dist_id).strip():
+                row_idx = i
+                break
+
+        if row_idx != -1:
+            meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+            sheet_id = next(
+                (s["properties"]["sheetId"] for s in meta.get("sheets", []) if s["properties"]["title"] == TAB_DISTRICTS),
+                None
+            )
+            if sheet_id is not None:
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=SPREADSHEET_ID,
+                    body={"requests": [{
+                        "deleteDimension": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "ROWS",
+                                "startIndex": row_idx,
+                                "endIndex": row_idx + 1
+                            }
+                        }
+                    }]}
+                ).execute()
+                st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Gagal menghapus distrik: {e}")
 
 
 def get_training_records():
     """Mengambil riwayat data training dengan 13 kolom baku A-M"""
-    conn = get_connection()
+    service = get_sheets_service()
+    if not service:
+        st.error("⚠️ Kredensial Google Sheets tidak ditemukan di Secrets.")
+        return pd.DataFrame(columns=SHEET_COLUMNS)
+
     try:
-        df = conn.read(worksheet="training_records", ttl=2)
-        if df is not None and not df.empty:
-            df = df.dropna(how='all')
-            if 'id' in df.columns:
-                df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
-                df = df[(df['id'] > 0) & (df['id'] < 1000000)]
+        res = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_RECORDS}!A1:M"
+        ).execute()
+        values = res.get("values", [])
+        if values and len(values) > 1:
+            headers = [str(h).strip() for h in values[0]]
+            rows = [r + [""] * (len(headers) - len(r)) for r in values[1:]]
+            df = pd.DataFrame(rows, columns=headers)
 
-                for col in SHEET_COLUMNS:
-                    if col not in df.columns:
-                        df[col] = ''
-                df = df[SHEET_COLUMNS]
+            for col in SHEET_COLUMNS:
+                if col not in df.columns:
+                    df[col] = ""
+            df = df[SHEET_COLUMNS]
 
-                df['nik'] = df['nik'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                df['phone'] = df['phone'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                df['cert_no_sj'] = df['cert_no_sj'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
-                df['cert_no_in'] = df['cert_no_in'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            df['id'] = pd.to_numeric(df['id'], errors='coerce').fillna(0).astype(int)
+            df = df[(df['id'] > 0) & (df['id'] < 1000000)]
 
-                df = df.drop_duplicates(subset=['training_date', 'nik', 'cert_no_sj', 'cert_no_in'], keep='first')
-                return df.sort_values(by='id', ascending=False).reset_index(drop=True)
-    except Exception:
-        pass
+            df['nik'] = df['nik'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            df['phone'] = df['phone'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            df['cert_no_sj'] = df['cert_no_sj'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+            df['cert_no_in'] = df['cert_no_in'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+
+            df = df.drop_duplicates(subset=['training_date', 'nik', 'cert_no_sj', 'cert_no_in'], keep='first')
+            return df.sort_values(by='id', ascending=False).reset_index(drop=True)
+    except Exception as e:
+        st.error(f"⚠️ Gagal membaca data training_records: {e}")
+
     return pd.DataFrame(columns=SHEET_COLUMNS)
 
 
@@ -140,8 +271,12 @@ def get_next_cert_number(airline):
 
 
 def save_training_record(record_data):
-    """Menyimpan record ujian peserta dengan 13 kolom terkunci (A-M)"""
-    conn = get_connection()
+    """Menyimpan record ujian peserta baru dengan 13 kolom terkunci (A-M)"""
+    service = get_sheets_service()
+    if not service:
+        st.error("⚠️ Koneksi Google Sheets gagal saat menyimpan data.")
+        return False
+
     df = get_training_records()
 
     # Validasi pencegahan submit ganda jika NIK dan tanggal pelatihan identik
@@ -168,30 +303,29 @@ def save_training_record(record_data):
         "job_role": str(record_data.get('job_role', '')),
         "company": str(record_data.get('company', '')),
         "district": target_dist_code,
-        "score": record_data.get('score', 0),
+        "score": str(record_data.get('score', 0)),
         "status": str(record_data.get('status', '')),
         "cert_no_sj": str(record_data.get('cert_no_sj', '-')),
         "cert_no_in": str(record_data.get('cert_no_in', '-')),
         "expiry_date": str(record_data.get('expiry_date', '-')),
-        "id": next_id
+        "id": str(next_id)
     }
 
-    # Baca ulang data asli sheet agar urutan baris tetap terjaga rapi
-    raw_df = conn.read(worksheet="training_records", ttl=0)
-    if raw_df is not None and not raw_df.empty:
-        raw_df = raw_df.dropna(how='all')
-        for col in SHEET_COLUMNS:
-            if col not in raw_df.columns:
-                raw_df[col] = ''
-        raw_df = raw_df[SHEET_COLUMNS]
-    else:
-        raw_df = pd.DataFrame(columns=SHEET_COLUMNS)
+    row_values = [clean_row[col] for col in SHEET_COLUMNS]
 
-    new_row_df = pd.DataFrame([clean_row])[SHEET_COLUMNS]
-    updated_df = pd.concat([raw_df, new_row_df], ignore_index=True).fillna('')
-    conn.update(worksheet="training_records", data=updated_df)
+    try:
+        service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_RECORDS}!A1:M1",
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [row_values]}
+        ).execute()
+    except Exception as e:
+        st.error(f"❌ Gagal menyimpan ke Google Sheets: {e}")
+        return False
 
-    # Perbarui recurrent distrik jika status LULUS
+    # Perbarui jadwal recurrent distrik jika status LULUS
     if clean_row['status'] == 'LULUS':
         t_date = clean_row['training_date']
         try:
@@ -199,15 +333,21 @@ def save_training_record(record_data):
             next_due = dt_obj.replace(year=dt_obj.year + 2).strftime("%Y-%m-%d")
 
             df_dist = get_districts()
-            if target_dist_name:
-                m_idx = df_dist[(df_dist['code'] == target_dist_code) & (df_dist['name'] == target_dist_name)].index
-            else:
-                m_idx = df_dist[df_dist['code'] == target_dist_code].index
+            if not df_dist.empty:
+                if target_dist_name:
+                    matched_dist = df_dist[(df_dist['code'] == target_dist_code) & (df_dist['name'] == target_dist_name)]
+                else:
+                    matched_dist = df_dist[df_dist['code'] == target_dist_code]
 
-            if not m_idx.empty:
-                df_dist.loc[m_idx, 'last_training_date'] = str(t_date)
-                df_dist.loc[m_idx, 'next_due_date'] = next_due
-                conn.update(worksheet="districts", data=df_dist.fillna(''))
+                for _, d_row in matched_dist.iterrows():
+                    update_district_row(
+                        d_row['id'],
+                        d_row['code'],
+                        d_row['name'],
+                        d_row['category'],
+                        str(t_date),
+                        next_due
+                    )
         except Exception:
             pass
 
@@ -217,28 +357,80 @@ def save_training_record(record_data):
 
 def delete_training_record(record_id):
     """Menghapus data hasil training berdasarkan ID peserta"""
-    conn = get_connection()
-    raw_df = conn.read(worksheet="training_records", ttl=0)
-    if raw_df is not None and not raw_df.empty and 'id' in raw_df.columns:
-        raw_df = raw_df.dropna(how='all')
-        for col in SHEET_COLUMNS:
-            if col not in raw_df.columns:
-                raw_df[col] = ''
-        raw_df['id_num'] = pd.to_numeric(raw_df['id'], errors='coerce').fillna(0).astype(int)
-        raw_df = raw_df[raw_df['id_num'] != int(record_id)]
-        raw_df = raw_df[SHEET_COLUMNS]
-        conn.update(worksheet="training_records", data=raw_df.fillna(''))
-        st.cache_data.clear()
+    service = get_sheets_service()
+    if not service:
+        return
+
+    try:
+        res = service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{TAB_RECORDS}!A1:M"
+        ).execute()
+        values = res.get("values", [])
+        row_idx = -1
+        for i, row in enumerate(values):
+            if i == 0:
+                continue
+            if len(row) >= 13 and str(row[12]).strip() == str(record_id).strip():
+                row_idx = i
+                break
+
+        if row_idx != -1:
+            meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+            sheet_id = next(
+                (s["properties"]["sheetId"] for s in meta.get("sheets", []) if s["properties"]["title"] == TAB_RECORDS),
+                None
+            )
+            if sheet_id is not None:
+                service.spreadsheets().batchUpdate(
+                    spreadsheetId=SPREADSHEET_ID,
+                    body={"requests": [{
+                        "deleteDimension": {
+                            "range": {
+                                "sheetId": sheet_id,
+                                "dimension": "ROWS",
+                                "startIndex": row_idx,
+                                "endIndex": row_idx + 1
+                            }
+                        }
+                    }]}
+                ).execute()
+                st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Gagal menghapus data: {e}")
 
 
 def reset_cert_sequence():
     """Membersihkan cache data agar data terbaru langsung terbaca"""
     st.cache_data.clear()
+    st.cache_resource.clear()
 
 
 def clear_all_training_records():
-    """Mengosongkan seluruh tabel riwayat ujian dengan 13 kolom baku"""
-    conn = get_connection()
-    empty_records = pd.DataFrame(columns=SHEET_COLUMNS)
-    conn.update(worksheet="training_records", data=empty_records)
-    st.cache_data.clear()
+    """Mengosongkan seluruh baris data riwayat ujian (header baris 1 tetap aman)"""
+    service = get_sheets_service()
+    if not service:
+        return
+
+    try:
+        meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
+        sheet_id = next(
+            (s["properties"]["sheetId"] for s in meta.get("sheets", []) if s["properties"]["title"] == TAB_RECORDS),
+            None
+        )
+        if sheet_id is not None:
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=SPREADSHEET_ID,
+                body={"requests": [{
+                    "deleteDimension": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "ROWS",
+                            "startIndex": 1
+                        }
+                    }
+                }]}
+            ).execute()
+            st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Gagal mengosongkan tabel: {e}")
