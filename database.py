@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # ID Asli Spreadsheet DG_Awareness_Database (huruf I besar ganda)
-DEFAULT_SPREADSHEET_ID = "1wr7cAII_gMDTjyK6yeScysAkOLcgoGfyXYXFtX7cFrs".strip()
+DEFAULT_SPREADSHEET_ID = "1wr7cAII_gMDTjyK6yeScysAkOLcgoGfyXYXFtx7cFrs".strip()
 
 TAB_RECORDS = "training_records"
 TAB_DISTRICTS = "districts"
