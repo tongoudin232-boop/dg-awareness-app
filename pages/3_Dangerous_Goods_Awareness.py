@@ -431,7 +431,6 @@ elif menu == "Ujian DG Awareness":
                             'company': company.strip(),
                             'district': dist_code,
                             'district_name': dist_name,
-                            'district_full': selected_dist,
                             'score': score,
                             'status': 'LULUS',
                             'cert_no_sj': cert_no_sj,
@@ -475,7 +474,6 @@ elif menu == "Ujian DG Awareness":
                             'company': company.strip(),
                             'district': dist_code,
                             'district_name': dist_name,
-                            'district_full': selected_dist,
                             'score': score,
                             'status': 'TIDAK LULUS',
                             'cert_no_sj': '-',
@@ -719,20 +717,13 @@ elif menu == "Dashboard Instruktur & Records":
             # ---------------- TAB 1: BATCH UNDUH BERDASARKAN DISTRIK PENUGASAN ----------------
             with tab_cert1:
                 st.markdown("##### 📁 Download Sertifikat Sesuai Distrik Penugasan")
-                st.caption("Pilihan merujuk langsung pada nama unit di Master Distrik Penugasan (misal: BTH - WH IAS, BTH - GH & Internal, dll.).")
+                st.caption("Pilihan merujuk langsung pada nama unit di Master Distrik (GH & Internal, Warehouse, Regulated Agent, Mitra Cargo, dll.).")
 
                 p_copy = passed_records.copy()
                 dist_df_master = get_districts()
                 master_dist_list = (dist_df_master['code'] + " - " + dist_df_master['name']).tolist() if not dist_df_master.empty else []
 
-                if 'district_full' in p_copy.columns:
-                    actual_choices = [str(x).strip() for x in p_copy['district_full'].dropna().unique() if str(x).strip()]
-                else:
-                    actual_choices = []
-
-                all_choices = sorted(list(set(master_dist_list + actual_choices)))
-                
-                # Menambahkan opsi global per bandara di bagian atas
+                all_choices = sorted(list(set(master_dist_list)))
                 dist_codes = sorted(p_copy['district'].dropna().unique().tolist())
                 for d_code in dist_codes:
                     all_choices.insert(0, f"{d_code} - (Semua Unit / Perusahaan)")
@@ -745,36 +736,39 @@ elif menu == "Dashboard Instruktur & Records":
                         key="batch_group_select"
                     )
 
-                # ==================== PEMFILTERAN CERDAS, AKURAT & ROBUST ====================
+                # ==================== PEMFILTERAN BERBASIS UNIT & KATEGORI ====================
                 g_parts = selected_group.split(" - ", 1)
                 target_dist = g_parts[0].strip()
                 target_name = g_parts[1].strip() if len(g_parts) > 1 else ""
 
+                df_dist_only = p_copy[p_copy['district'] == target_dist].copy()
+
                 if target_name == "(Semua Unit / Perusahaan)":
-                    filtered_candidates = p_copy[p_copy['district'] == target_dist].copy()
+                    filtered_candidates = df_dist_only
                     group_tag = f"{target_dist}_SEMUA"
                 else:
-                    df_dist_only = p_copy[p_copy['district'] == target_dist].copy()
-                    
-                    # Gabungkan seluruh kolom identitas teks yang ada pada data
-                    search_corpus = df_dist_only['company'].fillna('').astype(str)
-                    if 'district_full' in df_dist_only.columns:
-                        search_corpus = search_corpus + " " + df_dist_only['district_full'].fillna('').astype(str)
-                    if 'district_name' in df_dist_only.columns:
-                        search_corpus = search_corpus + " " + df_dist_only['district_name'].fillna('').astype(str)
+                    cat_upper = ""
+                    if not dist_df_master.empty:
+                        m_row = dist_df_master[
+                            (dist_df_master['code'].astype(str).str.strip() == target_dist) &
+                            (dist_df_master['name'].astype(str).str.strip() == target_name)
+                        ]
+                        if not m_row.empty:
+                            cat_upper = str(m_row.iloc[0]['category']).upper()
 
+                    comp_series = df_dist_only['company'].fillna('').astype(str)
                     name_upper = target_name.upper()
-                    
-                    if "IAS" in name_upper:
-                        # Menangkap peserta dari IAS (WH IAS)
-                        mask = search_corpus.str.contains(r"IAS|INTEGRASI", case=False, na=False)
-                    elif "GH" in name_upper or "INTERNAL" in name_upper:
-                        # Menangkap peserta GH & Internal (non-IAS di distrik yang sama)
-                        mask = ~search_corpus.str.contains(r"IAS|INTEGRASI", case=False, na=False)
+
+                    if "REGULATED" in cat_upper or "REGULATED" in name_upper or name_upper.startswith("RA "):
+                        mask = comp_series.str.contains(r"REGULATED|\bRA\b", case=False, na=False)
+                    elif "WAREHOUSE" in cat_upper or "IAS" in name_upper or "WAREHOUSE" in name_upper or name_upper.startswith("WH "):
+                        mask = comp_series.str.contains(r"IAS|INTEGRASI|WAREHOUSE|\bWH\b", case=False, na=False)
+                    elif "MITRA" in cat_upper or "JASTER" in cat_upper or "MITRA" in name_upper or "JASTER" in name_upper:
+                        mask = comp_series.str.contains(r"MITRA|JASTER|EXPEDISI|KARGO|CARGO", case=False, na=False)
+                    elif "GH" in name_upper or "INTERNAL" in name_upper or "SRIWIJAYA" in cat_upper or "NAM" in cat_upper:
+                        mask = ~comp_series.str.contains(r"IAS|INTEGRASI|WAREHOUSE|REGULATED|\bRA\b|\bWH\b", case=False, na=False)
                     else:
-                        # Default kata kunci spesifik
-                        clean_keyword = target_name.split()[0] if target_name else ""
-                        mask = search_corpus.str.contains(clean_keyword, case=False, na=False)
+                        mask = comp_series.str.contains(target_name, case=False, na=False)
 
                     filtered_candidates = df_dist_only[mask].copy()
                     clean_tag_name = target_name.replace(' ', '_').replace('&', 'dan').replace('/', '_')
@@ -796,6 +790,7 @@ elif menu == "Dashboard Instruktur & Records":
                 st.info(f"Ditemukan **{len(batch_candidates)} orang peserta** untuk target: **{selected_group}**.")
 
                 if not batch_candidates.empty:
+                    zip_key_suffix = f"{group_tag}_{batch_date}"
                     c_zip1, c_zip2, c_zip3 = st.columns(3)
 
                     with c_zip1:
@@ -816,12 +811,12 @@ elif menu == "Dashboard Instruktur & Records":
                                         except Exception:
                                             pass
                                 zip_buf_sj.seek(0)
-                                st.session_state['zip_data_sj'] = zip_buf_sj.getvalue()
+                                st.session_state[f'zip_sj_{zip_key_suffix}'] = zip_buf_sj.getvalue()
 
-                        if 'zip_data_sj' in st.session_state:
+                        if f'zip_sj_{zip_key_suffix}' in st.session_state:
                             st.download_button(
                                 label="📥 Unduh ZIP Sriwijaya Air (SJ)",
-                                data=st.session_state['zip_data_sj'],
+                                data=st.session_state[f'zip_sj_{zip_key_suffix}'],
                                 file_name=f"Sertifikat_SJ_{group_tag}.zip",
                                 mime="application/zip",
                                 use_container_width=True,
@@ -846,12 +841,12 @@ elif menu == "Dashboard Instruktur & Records":
                                         except Exception:
                                             pass
                                 zip_buf_in.seek(0)
-                                st.session_state['zip_data_in'] = zip_buf_in.getvalue()
+                                st.session_state[f'zip_in_{zip_key_suffix}'] = zip_buf_in.getvalue()
 
-                        if 'zip_data_in' in st.session_state:
+                        if f'zip_in_{zip_key_suffix}' in st.session_state:
                             st.download_button(
                                 label="📥 Unduh ZIP NAM Air (IN)",
-                                data=st.session_state['zip_data_in'],
+                                data=st.session_state[f'zip_in_{zip_key_suffix}'],
                                 file_name=f"Sertifikat_IN_{group_tag}.zip",
                                 mime="application/zip",
                                 use_container_width=True,
@@ -886,12 +881,12 @@ elif menu == "Dashboard Instruktur & Records":
                                         except Exception:
                                             pass
                                 zip_buf_all.seek(0)
-                                st.session_state['zip_data_all'] = zip_buf_all.getvalue()
+                                st.session_state[f'zip_all_{zip_key_suffix}'] = zip_buf_all.getvalue()
 
-                        if 'zip_data_all' in st.session_state:
+                        if f'zip_all_{zip_key_suffix}' in st.session_state:
                             st.download_button(
                                 label="📥 Unduh ZIP Lengkap (SJ & IN)",
-                                data=st.session_state['zip_data_all'],
+                                data=st.session_state[f'zip_all_{zip_key_suffix}'],
                                 file_name=f"Sertifikat_Lengkap_{group_tag}.zip",
                                 mime="application/zip",
                                 use_container_width=True,
