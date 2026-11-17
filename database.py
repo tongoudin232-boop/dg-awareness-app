@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -6,8 +7,8 @@ from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-# ID Spreadsheet DG_Awareness_Database
-SPREADSHEET_ID = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtX7cFrs".strip()
+# ID Asli Spreadsheet DG_Awareness_Database (huruf I besar ganda)
+DEFAULT_SPREADSHEET_ID = "1wr7cAII_gMDTjyK6yeScysAkOLcgoGfyXYXFtX7cFrs".strip()
 
 TAB_RECORDS = "training_records"
 TAB_DISTRICTS = "districts"
@@ -24,35 +25,42 @@ DISTRICT_COLUMNS = [
 ]
 
 
-def get_credentials():
-    """Mengambil kredensial Service Account dari st.secrets"""
+def get_sheets_config():
+    """Mengambil kredensial dan Spreadsheet ID milik DG Awareness dari st.secrets"""
+    creds_info = None
+    sheet_id = DEFAULT_SPREADSHEET_ID
+
     try:
-        creds_info = None
-        if "gcp_service_account" in st.secrets:
+        # 1. Prioritaskan [connections.gsheets] yang dipakai DG Awareness sebelumnya
+        if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+            gs_sec = dict(st.secrets["connections"]["gsheets"])
+            if "private_key" in gs_sec:
+                creds_info = gs_sec
+            raw_ss = str(gs_sec.get("spreadsheet", "")).strip()
+            if raw_ss:
+                match = re.search(r"/d/([a-zA-Z0-9-_]+)", raw_ss)
+                if match:
+                    sheet_id = match.group(1)
+                elif len(raw_ss) > 20 and "/" not in raw_ss:
+                    sheet_id = raw_ss
+
+        # 2. Fallback ke [gcp_service_account] jika [connections.gsheets] tidak ada
+        if not creds_info and "gcp_service_account" in st.secrets:
             creds_info = dict(st.secrets["gcp_service_account"])
-        elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            creds_info = dict(st.secrets["connections"]["gsheets"])
-        elif "private_key" in st.secrets:
+
+        if not creds_info and "private_key" in st.secrets:
             creds_info = dict(st.secrets)
 
         if not creds_info or "private_key" not in creds_info:
-            return None
+            return None, sheet_id, ""
 
         creds_info["private_key"] = str(creds_info["private_key"]).replace("\\n", "\n").strip()
-        return Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+        client_email = str(creds_info.get("client_email", "")).strip()
+        creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+        service = build("sheets", "v4", credentials=creds, cache_discovery=False)
+        return service, sheet_id, client_email
     except Exception:
-        return None
-
-
-def get_sheets_service():
-    """Inisialisasi koneksi Google Sheets API v4"""
-    creds = get_credentials()
-    if not creds:
-        return None
-    try:
-        return build("sheets", "v4", credentials=creds, cache_discovery=False)
-    except Exception:
-        return None
+        return None, sheet_id, ""
 
 
 def init_db():
@@ -62,14 +70,14 @@ def init_db():
 
 def get_districts():
     """Mengambil daftar seluruh distrik dari tab 'districts' Google Sheets"""
-    service = get_sheets_service()
+    service, sheet_id, client_email = get_sheets_config()
     if not service:
         st.error("⚠️ Kredensial Google Sheets tidak ditemukan di Secrets.")
         return pd.DataFrame()
 
     try:
         res = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_DISTRICTS}!A1:F"
         ).execute()
         values = res.get("values", [])
@@ -84,14 +92,14 @@ def get_districts():
             df = df[df['id'] > 0]
             return df.sort_values(by=['code', 'name']).reset_index(drop=True)
     except Exception as e:
-        st.error(f"⚠️ Gagal membaca tabel districts: {e}")
+        st.error(f"⚠️ Gagal membaca tabel districts (pastikan email `{client_email}` sudah menjadi Editor di Google Sheets): {e}")
 
     return pd.DataFrame()
 
 
 def add_district(code, name, category):
     """Menambahkan distrik baru ke tab 'districts' Google Sheets"""
-    service = get_sheets_service()
+    service, sheet_id, _ = get_sheets_config()
     if not service:
         return
 
@@ -107,7 +115,7 @@ def add_district(code, name, category):
     ]
     try:
         service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_DISTRICTS}!A1:F1",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
@@ -120,13 +128,13 @@ def add_district(code, name, category):
 
 def update_district_row(dist_id, code, name, category, last_date, due_date):
     """Memperbarui informasi data distrik tertentu"""
-    service = get_sheets_service()
+    service, sheet_id, _ = get_sheets_config()
     if not service:
         return
 
     try:
         res = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_DISTRICTS}!A1:F"
         ).execute()
         values = res.get("values", [])
@@ -140,7 +148,7 @@ def update_district_row(dist_id, code, name, category, last_date, due_date):
 
         if target_row != -1:
             service.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID,
+                spreadsheetId=sheet_id,
                 range=f"{TAB_DISTRICTS}!B{target_row}:F{target_row}",
                 valueInputOption="USER_ENTERED",
                 body={"values": [[
@@ -158,13 +166,13 @@ def update_district_row(dist_id, code, name, category, last_date, due_date):
 
 def delete_district_row(dist_id):
     """Menghapus distrik berdasarkan ID"""
-    service = get_sheets_service()
+    service, sheet_id, _ = get_sheets_config()
     if not service:
         return
 
     try:
         res = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_DISTRICTS}!A1:A"
         ).execute()
         values = res.get("values", [])
@@ -177,18 +185,18 @@ def delete_district_row(dist_id):
                 break
 
         if row_idx != -1:
-            meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sheet_id = next(
+            meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            gid = next(
                 (s["properties"]["sheetId"] for s in meta.get("sheets", []) if s["properties"]["title"] == TAB_DISTRICTS),
                 None
             )
-            if sheet_id is not None:
+            if gid is not None:
                 service.spreadsheets().batchUpdate(
-                    spreadsheetId=SPREADSHEET_ID,
+                    spreadsheetId=sheet_id,
                     body={"requests": [{
                         "deleteDimension": {
                             "range": {
-                                "sheetId": sheet_id,
+                                "sheetId": gid,
                                 "dimension": "ROWS",
                                 "startIndex": row_idx,
                                 "endIndex": row_idx + 1
@@ -203,14 +211,14 @@ def delete_district_row(dist_id):
 
 def get_training_records():
     """Mengambil riwayat data training dengan 13 kolom baku A-M"""
-    service = get_sheets_service()
+    service, sheet_id, client_email = get_sheets_config()
     if not service:
         st.error("⚠️ Kredensial Google Sheets tidak ditemukan di Secrets.")
         return pd.DataFrame(columns=SHEET_COLUMNS)
 
     try:
         res = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_RECORDS}!A1:M"
         ).execute()
         values = res.get("values", [])
@@ -235,7 +243,7 @@ def get_training_records():
             df = df.drop_duplicates(subset=['training_date', 'nik', 'cert_no_sj', 'cert_no_in'], keep='first')
             return df.sort_values(by='id', ascending=False).reset_index(drop=True)
     except Exception as e:
-        st.error(f"⚠️ Gagal membaca data training_records: {e}")
+        st.error(f"⚠️ Gagal membaca data training_records (pastikan email `{client_email}` sudah menjadi Editor di Google Sheets): {e}")
 
     return pd.DataFrame(columns=SHEET_COLUMNS)
 
@@ -272,7 +280,7 @@ def get_next_cert_number(airline):
 
 def save_training_record(record_data):
     """Menyimpan record ujian peserta baru dengan 13 kolom terkunci (A-M)"""
-    service = get_sheets_service()
+    service, sheet_id, _ = get_sheets_config()
     if not service:
         st.error("⚠️ Koneksi Google Sheets gagal saat menyimpan data.")
         return False
@@ -315,7 +323,7 @@ def save_training_record(record_data):
 
     try:
         service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_RECORDS}!A1:M1",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
@@ -357,13 +365,13 @@ def save_training_record(record_data):
 
 def delete_training_record(record_id):
     """Menghapus data hasil training berdasarkan ID peserta"""
-    service = get_sheets_service()
+    service, sheet_id, _ = get_sheets_config()
     if not service:
         return
 
     try:
         res = service.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
+            spreadsheetId=sheet_id,
             range=f"{TAB_RECORDS}!A1:M"
         ).execute()
         values = res.get("values", [])
@@ -376,18 +384,18 @@ def delete_training_record(record_id):
                 break
 
         if row_idx != -1:
-            meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-            sheet_id = next(
+            meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+            gid = next(
                 (s["properties"]["sheetId"] for s in meta.get("sheets", []) if s["properties"]["title"] == TAB_RECORDS),
                 None
             )
-            if sheet_id is not None:
+            if gid is not None:
                 service.spreadsheets().batchUpdate(
-                    spreadsheetId=SPREADSHEET_ID,
+                    spreadsheetId=sheet_id,
                     body={"requests": [{
                         "deleteDimension": {
                             "range": {
-                                "sheetId": sheet_id,
+                                "sheetId": gid,
                                 "dimension": "ROWS",
                                 "startIndex": row_idx,
                                 "endIndex": row_idx + 1
@@ -408,23 +416,23 @@ def reset_cert_sequence():
 
 def clear_all_training_records():
     """Mengosongkan seluruh baris data riwayat ujian (header baris 1 tetap aman)"""
-    service = get_sheets_service()
+    service, sheet_id, _ = get_sheets_config()
     if not service:
         return
 
     try:
-        meta = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
-        sheet_id = next(
+        meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+        gid = next(
             (s["properties"]["sheetId"] for s in meta.get("sheets", []) if s["properties"]["title"] == TAB_RECORDS),
             None
         )
-        if sheet_id is not None:
+        if gid is not None:
             service.spreadsheets().batchUpdate(
-                spreadsheetId=SPREADSHEET_ID,
+                spreadsheetId=sheet_id,
                 body={"requests": [{
                     "deleteDimension": {
                         "range": {
-                            "sheetId": sheet_id,
+                            "sheetId": gid,
                             "dimension": "ROWS",
                             "startIndex": 1
                         }
