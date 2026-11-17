@@ -69,7 +69,6 @@ SHEET_COLUMNS_BASIC = ["id", "training_date", "full_name", "nik", "phone", "job_
 SHEET_COLUMNS_DISTRICTS = ["id", "code", "name", "category", "last_training_date", "next_due_date"]
 TAB_DISTRICTS_BASIC = "districts_basic"
 
-# 🟢 ID SPREADSHEET (Dibersihkan dari spasi gaib) 🟢
 SPREADSHEET_ID_FIXED = "1KG5cv_p5ok0SGolYtFpoc8ZEeGbyS_e0u8k0XnnEt8Q".strip()
 
 def get_credentials():
@@ -113,7 +112,6 @@ DEFAULT_DISTRICTS_DATA = [
 def get_districts_basic():
     if service_sheets and SPREADSHEET_ID:
         try:
-            # RANGE TANPA TANDA KUTIP
             r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_DISTRICTS_BASIC}!A1:F").execute()
             v = r.get("values", [])
             if v and len(v) > 1:
@@ -182,7 +180,6 @@ def delete_district_row_basic(dist_id):
 def load_basic_records():
     if service_sheets and SPREADSHEET_ID:
         try:
-            # RANGE TANPA TANDA KUTIP
             r = service_sheets.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=f"{TAB_NAME_BASIC}!A1:Z").execute()
             v = r.get("values", [])
             df = pd.DataFrame(columns=SHEET_COLUMNS_BASIC)
@@ -286,7 +283,7 @@ def generate_cert_basic(airline, cert_no, name, training_date_str):
     can.setFont("Helvetica", 11)
     can.drawCentredString(a4_w * 0.5, a4_h * 0.28, f"{tgl_terbit_fmt}")
     
-    # 4. QR Code di atas Renji Hagen (X disetel pas di 0.784 agar persis di tengah nama)
+    # 4. QR Code di atas Renji Hagen
     verify_url = f"https://sjnam-cargo.streamlit.app/Basic_Air_Cargo?basic_cert={cert_no}"
     try:
         import qrcode
@@ -790,14 +787,38 @@ elif menu == "Dashboard Instruktur & Records":
                 c_btn1, c_btn2, c_btn3 = st.columns(3)
                 foto_bytes = foto_uploaded.getvalue() if foto_uploaded else None
                 with c_btn1:
-                    try: st.download_button(label=f"📥 PDF Sriwijaya Air ({sesi_label})", data=generate_attendance_pdf("SJ", tgl_display, jam_training, tempat_training, nama_instruktur, session_df, foto_bytes), file_name=f"Absensi_SJ_BC_{selected_absensi_dist}.pdf", mime="application/pdf", use_container_width=True)
-                    except Exception as e: st.error(f"Gagal generate PDF SJ: {e}")
+                    try:
+                        st.download_button(
+                            label=f"📥 PDF Sriwijaya Air ({sesi_label})",
+                            data=generate_attendance_pdf("SJ", tgl_display, jam_training, tempat_training, nama_instruktur, session_df, foto_bytes, course_title="BASIC AIR CARGO"),
+                            file_name=f"Absensi_SJ_BC_{selected_absensi_dist}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal generate PDF SJ: {e}")
                 with c_btn2:
-                    try: st.download_button(label=f"📥 PDF NAM Air ({sesi_label})", data=generate_attendance_pdf("IN", tgl_display, jam_training, tempat_training, nama_instruktur, session_df, foto_bytes), file_name=f"Absensi_IN_BC_{selected_absensi_dist}.pdf", mime="application/pdf", use_container_width=True)
-                    except Exception as e: st.error(f"Gagal generate PDF IN: {e}")
+                    try:
+                        st.download_button(
+                            label=f"📥 PDF NAM Air ({sesi_label})",
+                            data=generate_attendance_pdf("IN", tgl_display, jam_training, tempat_training, nama_instruktur, session_df, foto_bytes, course_title="BASIC AIR CARGO"),
+                            file_name=f"Absensi_IN_BC_{selected_absensi_dist}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal generate PDF IN: {e}")
                 with c_btn3:
-                    try: st.download_button(label=f"📊 Excel (.xlsx) ({sesi_label})", data=generate_attendance_excel(tgl_display, jam_training, tempat_training, nama_instruktur, session_df), file_name=f"Absensi_BC_{selected_absensi_dist}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-                    except Exception as e: st.error(f"Gagal generate Excel: {e}")
+                    try:
+                        st.download_button(
+                            label=f"📊 Excel (.xlsx) ({sesi_label})",
+                            data=generate_attendance_excel(tgl_display, jam_training, tempat_training, nama_instruktur, session_df, course_title="BASIC AIR CARGO"),
+                            file_name=f"Absensi_BC_{selected_absensi_dist}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"Gagal generate Excel: {e}")
 
         # ==================== UNDUH ULANG SERTIFIKAT ====================
         st.markdown("---")
@@ -827,34 +848,49 @@ elif menu == "Dashboard Instruktur & Records":
                 st.info(f"Ditemukan **{len(batch_candidates)} orang peserta** untuk target: **{selected_group if selected_group else '-'}**.")
                 
                 if not batch_candidates.empty:
+                    def safe_zip_name(val):
+                        return str(val).strip().replace('.0', '').replace('/', '-').replace('\\', '-').replace(' ', '_')
+
                     c_zip1, c_zip2, c_zip3 = st.columns(3)
                     with c_zip1:
                         if st.button("📦 Siapkan ZIP Sertifikat SJ", use_container_width=True):
                             zip_buf_sj = io.BytesIO()
                             with zipfile.ZipFile(zip_buf_sj, "w", zipfile.ZIP_DEFLATED) as zf:
                                 for _, row in batch_candidates.iterrows():
-                                    pdf_bytes = generate_cert_basic("SJ", str(row['cert_no_sj']).replace('.0', ''), str(row['full_name']), str(row['training_date']))
-                                    if pdf_bytes: zf.writestr(f"Sertifikat_SJ_{row['cert_no_sj']}_{str(row['full_name']).strip().replace(' ', '_')}.pdf", pdf_bytes)
+                                    raw_cert_sj = str(row['cert_no_sj']).replace('.0', '').strip()
+                                    if raw_cert_sj and raw_cert_sj != '-':
+                                        pdf_bytes = generate_cert_basic("SJ", raw_cert_sj, str(row['full_name']).strip(), str(row['training_date']))
+                                        if pdf_bytes:
+                                            zf.writestr(f"SJ/Sertifikat_SJ_{safe_zip_name(raw_cert_sj)}_{safe_zip_name(row['full_name'])}.pdf", pdf_bytes)
                             st.download_button("📥 Unduh ZIP Sriwijaya Air (SJ)", data=zip_buf_sj.getvalue(), file_name=f"Sertifikat_Basic_SJ_{target_dist}.zip", mime="application/zip", use_container_width=True)
                     with c_zip2:
                         if st.button("📦 Siapkan ZIP Sertifikat IN", use_container_width=True):
                             zip_buf_in = io.BytesIO()
                             with zipfile.ZipFile(zip_buf_in, "w", zipfile.ZIP_DEFLATED) as zf:
                                 for _, row in batch_candidates.iterrows():
-                                    pdf_bytes = generate_cert_basic("IN", str(row['cert_no_in']).replace('.0', ''), str(row['full_name']), str(row['training_date']))
-                                    if pdf_bytes: zf.writestr(f"Sertifikat_IN_{row['cert_no_in']}_{str(row['full_name']).strip().replace(' ', '_')}.pdf", pdf_bytes)
+                                    raw_cert_in = str(row['cert_no_in']).replace('.0', '').strip()
+                                    if raw_cert_in and raw_cert_in != '-':
+                                        pdf_bytes = generate_cert_basic("IN", raw_cert_in, str(row['full_name']).strip(), str(row['training_date']))
+                                        if pdf_bytes:
+                                            zf.writestr(f"IN/Sertifikat_IN_{safe_zip_name(raw_cert_in)}_{safe_zip_name(row['full_name'])}.pdf", pdf_bytes)
                             st.download_button("📥 Unduh ZIP NAM Air (IN)", data=zip_buf_in.getvalue(), file_name=f"Sertifikat_Basic_IN_{target_dist}.zip", mime="application/zip", use_container_width=True)
                     with c_zip3:
                         if st.button("📦 Siapkan ZIP Lengkap (SJ + IN)", use_container_width=True):
                             zip_buf_all = io.BytesIO()
                             with zipfile.ZipFile(zip_buf_all, "w", zipfile.ZIP_DEFLATED) as zf:
                                 for _, row in batch_candidates.iterrows():
-                                    c_name = str(row['full_name']).strip().replace(' ', '_')
-                                    p_sj = generate_cert_basic("SJ", str(row['cert_no_sj']).replace('.0', ''), str(row['full_name']), str(row['training_date']))
-                                    p_in = generate_cert_basic("IN", str(row['cert_no_in']).replace('.0', ''), str(row['full_name']), str(row['training_date']))
-                                    if p_sj: zf.writestr(f"Sriwijaya_Air/Sertifikat_SJ_{row['cert_no_sj']}_{c_name}.pdf", p_sj)
-                                    if p_in: zf.writestr(f"NAM_Air/Sertifikat_IN_{row['cert_no_in']}_{c_name}.pdf", p_in)
-                            st.download_button("📥 Unduh ZIP Lengkap", data=zip_buf_all.getvalue(), file_name=f"Sertifikat_Lengkap_Basic_{target_dist}.zip", mime="application/zip", use_container_width=True)
+                                    c_name = safe_zip_name(row['full_name'])
+                                    raw_cert_sj = str(row['cert_no_sj']).replace('.0', '').strip()
+                                    raw_cert_in = str(row['cert_no_in']).replace('.0', '').strip()
+                                    if raw_cert_sj and raw_cert_sj != '-':
+                                        p_sj = generate_cert_basic("SJ", raw_cert_sj, str(row['full_name']).strip(), str(row['training_date']))
+                                        if p_sj:
+                                            zf.writestr(f"SJ/Sertifikat_SJ_{safe_zip_name(raw_cert_sj)}_{c_name}.pdf", p_sj)
+                                    if raw_cert_in and raw_cert_in != '-':
+                                        p_in = generate_cert_basic("IN", raw_cert_in, str(row['full_name']).strip(), str(row['training_date']))
+                                        if p_in:
+                                            zf.writestr(f"IN/Sertifikat_IN_{safe_zip_name(raw_cert_in)}_{c_name}.pdf", p_in)
+                            st.download_button("📥 Unduh ZIP Lengkap (SJ & IN)", data=zip_buf_all.getvalue(), file_name=f"Sertifikat_Lengkap_Basic_{target_dist}.zip", mime="application/zip", use_container_width=True)
 
             with tab_cert2:
                 st.markdown("##### 👤 Download Sertifikat Spesifik Per Peserta")
@@ -877,7 +913,6 @@ elif menu == "Master Distrik & Jadwal Recurrent":
     dist_df = get_districts_basic()
 
     def calculate_status(due_str):
-        # Tambahkan tanda '-' di dalam list ini:
         if pd.isna(due_str) or not due_str or str(due_str).strip() in ['None', '', 'nan', 'NaT', '-']: return "Belum Ada Riwayat Training"
         try:
             diff_days = (datetime.strptime(str(due_str)[:10], "%Y-%m-%d").date() - date.today()).days
