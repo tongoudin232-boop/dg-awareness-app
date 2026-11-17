@@ -7,7 +7,7 @@ from googleapiclient.discovery import build
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # ID Spreadsheet DG_Awareness_Database
-SPREADSHEET_ID = "1wr7cAII_gMDTjyK6yeScysAkOLcgoGfyXYXFtX7cFrs".strip()
+SPREADSHEET_ID = "1wr7cAll_gMDTjyK6yeScysAkOLcgoGfyXYXFtX7cFrs".strip()
 
 TAB_RECORDS = "training_records"
 TAB_DISTRICTS = "districts"
