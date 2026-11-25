@@ -521,28 +521,64 @@ elif menu == "Dashboard Instruktur & Records":
         st.info("Belum ada data riwayat training. (Tabel Google Sheets masih kosong)")
     else:
         with st.expander("🗑️ **Hapus Record Spesifik (Berdasarkan ID / Nama)**", expanded=False):
-            rec_options = {
-                f"ID {r['id']} | {r['full_name']} ({r['district']}) - Tgl: {r['training_date']}": r['id']
-                for _, r in records_df.iterrows()
-            }
-            selected_to_delete = st.selectbox("Pilih data yang ingin dihapus permanen:", list(rec_options.keys()))
-            if st.button("Hapus Data Terpilih Ini", type="primary"):
-                del_id = rec_options[selected_to_delete]
-                delete_training_record(del_id)
-                st.success("✅ Data berhasil dihapus permanen dari Google Sheets!")
-                st.rerun()
+            search_del_query = st.text_input(
+                "🔍 Cari Data Peserta (Ketik Nama, ID, NIK, atau Distrik):",
+                placeholder="Contoh: Sri Zaitun atau 104...",
+                key="search_del_dg"
+            ).strip()
+
+            df_del_filtered = records_df.copy()
+            if search_del_query:
+                mask_del = (
+                    df_del_filtered['id'].astype(str).str.contains(search_del_query, case=False, na=False, regex=False) |
+                    df_del_filtered['full_name'].astype(str).str.contains(search_del_query, case=False, na=False, regex=False) |
+                    df_del_filtered['nik'].astype(str).str.contains(search_del_query, case=False, na=False, regex=False) |
+                    df_del_filtered['district'].astype(str).str.contains(search_del_query, case=False, na=False, regex=False) |
+                    df_del_filtered['training_date'].astype(str).str.contains(search_del_query, case=False, na=False, regex=False)
+                )
+                df_del_filtered = df_del_filtered[mask_del]
+
+            if df_del_filtered.empty:
+                st.warning("Tidak ada data peserta yang cocok dengan kata kunci pencarian tersebut.")
+            else:
+                if search_del_query:
+                    st.caption(f"Menampilkan **{len(df_del_filtered)}** data yang cocok:")
+
+                rec_options = {
+                    f"ID {r['id']} | {r['full_name']} | NIK: {r['nik']} ({r['district']}) - Tgl: {r['training_date']}": r['id']
+                    for _, r in df_del_filtered.iterrows()
+                }
+                selected_to_delete = st.selectbox(
+                    "Pilih data yang ingin dihapus permanen:",
+                    list(rec_options.keys()),
+                    key="select_del_dg"
+                )
+                if st.button("Hapus Data Terpilih Ini", type="primary", key="btn_del_spec_dg"):
+                    del_id = rec_options[selected_to_delete]
+                    delete_training_record(del_id)
+                    st.success("✅ Data berhasil dihapus permanen dari Google Sheets!")
+                    st.rerun()
+
+        dist_filter_options = sorted(
+            [str(x).strip() for x in records_df['district'].dropna().unique() if str(x).strip()],
+            key=lambda s: s.lower()
+        )
+        role_filter_options = sorted(
+            [str(x).strip() for x in records_df['job_role'].dropna().unique() if str(x).strip()],
+            key=lambda s: s.lower()
+        )
 
         col1, col2 = st.columns(2)
         with col1:
-            filter_dist = st.multiselect("Filter Distrik", options=records_df['district'].unique())
+            filter_dist = st.multiselect("Filter Distrik", options=dist_filter_options)
         with col2:
-            filter_role = st.multiselect("Filter Jabatan", options=records_df['job_role'].unique())
+            filter_role = st.multiselect("Filter Jabatan", options=role_filter_options)
 
         filtered_df = records_df.copy()
         if filter_dist:
-            filtered_df = filtered_df[filtered_df['district'].isin(filter_dist)]
+            filtered_df = filtered_df[filtered_df['district'].astype(str).str.strip().isin(filter_dist)]
         if filter_role:
-            filtered_df = filtered_df[filtered_df['job_role'].isin(filter_role)]
+            filtered_df = filtered_df[filtered_df['job_role'].astype(str).str.strip().isin(filter_role)]
 
         st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
